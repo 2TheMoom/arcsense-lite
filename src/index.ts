@@ -9,6 +9,7 @@ import { analyzeTransactions } from "./services/analysisService";
 import { saveReport } from "./storage/fileStorage";
 import { analyzeTrend } from "./utils/trendAnalyzer";
 import { generateInsights } from "./utils/insightGenerator";
+import { generateXPost } from "./utils/xPostGenerator";
 
 async function run() {
   try {
@@ -96,6 +97,12 @@ Top Failing Contracts:
     // 🧠 Insight generation
     const insights = generateInsights(reportData, trend);
     console.log(insights);
+
+    // 🐦 X post generation
+    const xPost = generateXPost(reportData, trend);
+
+    console.log("\n🐦 X Post Preview:\n");
+    console.log(xPost);
 
   } catch (err: any) {
     console.error("❌ Error:", err.message || err);
