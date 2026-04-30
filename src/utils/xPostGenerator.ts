@@ -3,26 +3,28 @@ export function generateXPost(current: any, trendText: string) {
 
   let post = "🐦 ArcSense Update\n\n";
 
-  // 🔥 Smarter hook
+  // 🔥 Stronger hook (numbers + narrative)
   if (current.avgFailureRate === 0) {
-    post += `Testnet just hit 0% failure rate across the last ${current.blocks} blocks.\n`;
+    post += `Testnet just hit 0% failure rate across the last ${current.blocks} blocks.\n\n`;
   } else if (trendText.includes("increased")) {
-    post += `Failure rate is rising on testnet.\n`;
+    post += `Failure rate just moved from a lower baseline → ${rate}% across the last ${current.blocks} blocks.\n\n`;
   } else if (trendText.includes("decreased")) {
-    post += `Failure rate is dropping on testnet.\n`;
+    post += `Failure rate dropped significantly to ${rate}% across the last ${current.blocks} blocks.\n\n`;
   } else {
-    post += `Testnet activity remains stable.\n`;
+    post += `Testnet is holding steady at ${rate}% failure rate.\n\n`;
   }
 
-  post += `\nCurrent failure rate: ${rate}% across last ${current.blocks} blocks.\n\n`;
+  // 🎯 Add tension if failures exist
+  if (current.totalFailed > 0) {
+    post += `Only ${current.totalFailed} failed transaction${current.totalFailed > 1 ? "s" : ""} — but here’s the catch:\n\n`;
 
-  // Contract highlight
-  if (current.topFailingContracts.length > 0) {
-    const [addr, count] = current.topFailingContracts[0];
+    if (current.topFailingContracts.length > 0) {
+      const [addr, count] = current.topFailingContracts[0];
 
-    post += `Top failing contract:\n${addr}\n(${count} failures)\n\n`;
+      post += `A single contract is responsible for most (or all) failures:\n${addr}\n(${count} failures)\n\n`;
+    }
   } else {
-    post += `No failing contracts detected.\n\n`;
+    post += `No failed transactions detected.\n\nNetwork looks clean.\n\n`;
   }
 
   post += "Tracking real testnet behavior > farming noise.\n\n";
