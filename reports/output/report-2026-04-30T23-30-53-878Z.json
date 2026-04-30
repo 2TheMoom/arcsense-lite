@@ -1,0 +1,7 @@
+{
+  "blocks": 5,
+  "totalTx": 250,
+  "totalFailed": 0,
+  "avgFailureRate": 0,
+  "topFailingContracts": []
+}

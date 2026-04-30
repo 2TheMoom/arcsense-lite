@@ -10,6 +10,7 @@ import { saveReport } from "./storage/fileStorage";
 import { analyzeTrend } from "./utils/trendAnalyzer";
 import { generateInsights } from "./utils/insightGenerator";
 import { generateXPost } from "./utils/xPostGenerator";
+import { generateThread } from "./utils/threadGenerator";
 
 async function run() {
   try {
@@ -41,7 +42,6 @@ async function run() {
       totalTx += stats.total;
       totalFailed += stats.failed;
 
-      // Merge failing contracts across blocks
       stats.topFailingContracts.forEach(
         ([address, count]: [string, number]) => {
           if (!globalFailureMap[address]) {
@@ -58,7 +58,6 @@ async function run() {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5);
 
-    // 📊 Console Report
     console.log(`
 📊 Multi-Block Report
 
@@ -78,7 +77,6 @@ Top Failing Contracts:
       console.log("No failing contracts detected.");
     }
 
-    // 💾 Prepare report data
     const reportData = {
       blocks: BLOCK_RANGE,
       totalTx,
@@ -87,22 +85,20 @@ Top Failing Contracts:
       topFailingContracts,
     };
 
-    // 💾 Save report
     saveReport(reportData);
 
-    // 📈 Trend analysis
     const trend = analyzeTrend(reportData);
     console.log(trend);
 
-    // 🧠 Insight generation
     const insights = generateInsights(reportData, trend);
     console.log(insights);
 
-    // 🐦 X post generation
     const xPost = generateXPost(reportData, trend);
-
     console.log("\n🐦 X Post Preview:\n");
     console.log(xPost);
+
+    const thread = generateThread(reportData, trend);
+    console.log(thread);
 
   } catch (err: any) {
     console.error("❌ Error:", err.message || err);
