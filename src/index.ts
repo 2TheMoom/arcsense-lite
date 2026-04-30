@@ -6,7 +6,7 @@ import {
 
 import { parseTransactions } from "./services/transactionService";
 import { analyzeTransactions } from "./services/analysisService";
-import { generateReport } from "./reports/reportGenerator";
+import { saveReport } from "./storage/fileStorage";
 
 async function run() {
   try {
@@ -39,12 +39,14 @@ async function run() {
       totalFailed += stats.failed;
 
       // merge contract failures
-      stats.topFailingContracts.forEach(([address, count]: [string, number]) => {
-        if (!globalFailureMap[address]) {
-          globalFailureMap[address] = 0;
+      stats.topFailingContracts.forEach(
+        ([address, count]: [string, number]) => {
+          if (!globalFailureMap[address]) {
+            globalFailureMap[address] = 0;
+          }
+          globalFailureMap[address] += count;
         }
-        globalFailureMap[address] += count;
-      });
+      );
     }
 
     const avgFailureRate = totalTx === 0 ? 0 : totalFailed / totalTx;
@@ -53,6 +55,7 @@ async function run() {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5);
 
+    // 📊 Console Report
     console.log(`
 📊 Multi-Block Report
 
@@ -61,7 +64,7 @@ Total Transactions: ${totalTx}
 Total Failed: ${totalFailed}
 Avg Failure Rate: ${(avgFailureRate * 100).toFixed(2)}%
 
-Top Failing Contracts Across Blocks:
+Top Failing Contracts:
 `);
 
     topFailingContracts.forEach(([addr, count]) => {
@@ -71,6 +74,17 @@ Top Failing Contracts Across Blocks:
     if (topFailingContracts.length === 0) {
       console.log("No failing contracts detected.");
     }
+
+    // 💾 Save report
+    const reportData = {
+      blocks: BLOCK_RANGE,
+      totalTx,
+      totalFailed,
+      avgFailureRate,
+      topFailingContracts,
+    };
+
+    saveReport(reportData);
 
   } catch (err: any) {
     console.error("❌ Error:", err.message || err);
