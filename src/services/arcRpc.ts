@@ -24,3 +24,15 @@ export async function getBlockByNumber(blockNumber: number) {
 
   return res.data.result;
 }
+
+// ✅ NEW: Fetch transaction receipt
+export async function getTransactionReceipt(txHash: string) {
+  const res = await axios.post(config.ARC_RPC_URL, {
+    jsonrpc: "2.0",
+    method: "eth_getTransactionReceipt",
+    params: [txHash],
+    id: 1,
+  });
+
+  return res.data.result;
+}
