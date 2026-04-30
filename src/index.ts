@@ -8,6 +8,7 @@ import { parseTransactions } from "./services/transactionService";
 import { analyzeTransactions } from "./services/analysisService";
 import { saveReport } from "./storage/fileStorage";
 import { analyzeTrend } from "./utils/trendAnalyzer";
+import { generateInsights } from "./utils/insightGenerator";
 
 async function run() {
   try {
@@ -39,7 +40,7 @@ async function run() {
       totalTx += stats.total;
       totalFailed += stats.failed;
 
-      // merge contract failures
+      // Merge failing contracts across blocks
       stats.topFailingContracts.forEach(
         ([address, count]: [string, number]) => {
           if (!globalFailureMap[address]) {
@@ -88,9 +89,13 @@ Top Failing Contracts:
     // 💾 Save report
     saveReport(reportData);
 
-    // 📈 Trend Analysis
+    // 📈 Trend analysis
     const trend = analyzeTrend(reportData);
     console.log(trend);
+
+    // 🧠 Insight generation
+    const insights = generateInsights(reportData, trend);
+    console.log(insights);
 
   } catch (err: any) {
     console.error("❌ Error:", err.message || err);
