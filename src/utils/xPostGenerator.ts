@@ -3,26 +3,30 @@ export function generateXPost(current: any, trendText: string) {
 
   let post = "🐦 ArcSense Update\n\n";
 
-  // 🔥 Stronger hook (numbers + narrative)
+  // 🔥 Strong, punchy hooks
   if (current.avgFailureRate === 0) {
     post += `Testnet just hit 0% failure rate across the last ${current.blocks} blocks.\n\n`;
   } else if (trendText.includes("increased")) {
-    post += `Failure rate just moved from a lower baseline → ${rate}% across the last ${current.blocks} blocks.\n\n`;
+    post += `Failure rate just spiked to ${rate}% on testnet.\n\n`;
   } else if (trendText.includes("decreased")) {
-    post += `Failure rate dropped significantly to ${rate}% across the last ${current.blocks} blocks.\n\n`;
+    post += `Failure rate dropped to ${rate}% across the last ${current.blocks} blocks.\n\n`;
   } else {
     post += `Testnet is holding steady at ${rate}% failure rate.\n\n`;
   }
 
-  // 🎯 Add tension if failures exist
+  // 🎯 Add tension + clarity
   if (current.totalFailed > 0) {
-    post += `Only ${current.totalFailed} failed transaction${current.totalFailed > 1 ? "s" : ""} — but here’s the catch:\n\n`;
+    post += `${current.totalFailed} failed transaction${current.totalFailed > 1 ? "s" : ""} — not alarming at first.\n\n`;
 
     if (current.topFailingContracts.length > 0) {
       const [addr, count] = current.topFailingContracts[0];
 
-      post += `A single contract is responsible for most (or all) failures:\n${addr}\n(${count} failures)\n\n`;
+      post += `But here’s the signal:\n`;
+      post += `One contract is responsible for ${Math.round((count / current.totalFailed) * 100)}% of failures:\n`;
+      post += `${addr}\n\n`;
     }
+
+    post += `That usually points to a contract-level issue, not random noise.\n\n`;
   } else {
     post += `No failed transactions detected.\n\nNetwork looks clean.\n\n`;
   }
