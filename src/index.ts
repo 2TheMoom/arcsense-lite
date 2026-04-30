@@ -7,6 +7,7 @@ import {
 import { parseTransactions } from "./services/transactionService";
 import { analyzeTransactions } from "./services/analysisService";
 import { saveReport } from "./storage/fileStorage";
+import { analyzeTrend } from "./utils/trendAnalyzer";
 
 async function run() {
   try {
@@ -75,7 +76,7 @@ Top Failing Contracts:
       console.log("No failing contracts detected.");
     }
 
-    // 💾 Save report
+    // 💾 Prepare report data
     const reportData = {
       blocks: BLOCK_RANGE,
       totalTx,
@@ -84,7 +85,12 @@ Top Failing Contracts:
       topFailingContracts,
     };
 
+    // 💾 Save report
     saveReport(reportData);
+
+    // 📈 Trend Analysis
+    const trend = analyzeTrend(reportData);
+    console.log(trend);
 
   } catch (err: any) {
     console.error("❌ Error:", err.message || err);

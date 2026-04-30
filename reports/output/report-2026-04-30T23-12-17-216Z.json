@@ -1,0 +1,12 @@
+{
+  "blocks": 5,
+  "totalTx": 250,
+  "totalFailed": 28,
+  "avgFailureRate": 0.112,
+  "topFailingContracts": [
+    [
+      "0xf467ec26cf1911a0ff87e3a6d36b3aec915506a9",
+      28
+    ]
+  ]
+}
