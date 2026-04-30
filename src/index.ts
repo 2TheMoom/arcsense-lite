@@ -18,7 +18,7 @@ async function run() {
     const block = await getBlockByNumber(latestBlock);
 
     // ✅ Limit to 20 transactions (faster)
-    const transactions = parseTransactions(block).slice(0, 20);
+    const transactions = parseTransactions(block).slice(0, 50);
 
     console.log(`Checking ${transactions.length} transactions...\n`);
 
