@@ -1,38 +1,51 @@
-export function generateXPost(current: any, trendText: string) {
-  const rate = (current.avgFailureRate * 100).toFixed(2);
+export function generateXPost(report: any) {
+  const failureRate = (report.avgFailureRate * 100).toFixed(2);
+  const totalFailed = report.totalFailed;
 
-  let post = "🐦 ArcSense Update\n\n";
+  if (totalFailed === 0) {
+    return `🐦 ArcSense Update
 
-  // 🔥 Strong, punchy hooks
-  if (current.avgFailureRate === 0) {
-    post += `Testnet just hit 0% failure rate across the last ${current.blocks} blocks.\n\n`;
-  } else if (trendText.includes("increased")) {
-    post += `Failure rate just spiked to ${rate}% on testnet.\n\n`;
-  } else if (trendText.includes("decreased")) {
-    post += `Failure rate dropped to ${rate}% across the last ${current.blocks} blocks.\n\n`;
-  } else {
-    post += `Testnet is holding steady at ${rate}% failure rate.\n\n`;
+Testnet activity remains stable.
+
+0 failed transactions across the last ${report.blocksAnalyzed} blocks.
+
+Tracking real testnet behavior > farming noise.
+
+#Arc #Testnet #Web3`;
   }
 
-  // 🎯 Add tension + clarity
-  if (current.totalFailed > 0) {
-    post += `${current.totalFailed} failed transaction${current.totalFailed > 1 ? "s" : ""} — not alarming at first.\n\n`;
+  const [topAddr, topCount] = report.topFailingContracts[0];
+  const dominance = topCount / totalFailed;
+  const dominancePct = Math.round(dominance * 100);
 
-    if (current.topFailingContracts.length > 0) {
-      const [addr, count] = current.topFailingContracts[0];
+  let insightLine = "";
 
-      post += `But here’s the signal:\n`;
-      post += `One contract is responsible for ${Math.round((count / current.totalFailed) * 100)}% of failures:\n`;
-      post += `${addr}\n\n`;
-    }
+  if (dominance >= 0.8) {
+    insightLine = `One contract is responsible for ${dominancePct}% of failures:
+${topAddr}
 
-    post += `That usually points to a contract-level issue, not random noise.\n\n`;
+That usually points to a contract-level issue.`;
+  } else if (dominance >= 0.3) {
+    insightLine = `Failures are spreading across multiple contracts, with one leading at ${dominancePct}%:
+${topAddr}
+
+This may signal broader instability.`;
   } else {
-    post += `No failed transactions detected.\n\nNetwork looks clean.\n\n`;
+    insightLine = `Failures are distributed across multiple contracts.
+
+No single dominant source detected — this suggests network-wide stress.`;
   }
 
-  post += "Tracking real testnet behavior > farming noise.\n\n";
-  post += "#Arc #Testnet #Web3";
+  return `🐦 ArcSense Update
 
-  return post;
+Failure rate is now ${failureRate}% on testnet.
+
+${totalFailed} failed transactions — not alarming at first.
+
+But here’s the signal:
+${insightLine}
+
+Tracking real testnet behavior > farming noise.
+
+#Arc #Testnet #Web3`;
 }

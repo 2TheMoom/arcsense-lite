@@ -1,57 +1,67 @@
-export function generateThread(current: any, trendText: string) {
-  const rate = (current.avgFailureRate * 100).toFixed(2);
+export function generateThread(report: any) {
+  const failureRate = (report.avgFailureRate * 100).toFixed(2);
+  const totalFailed = report.totalFailed;
 
-  const [topAddr, topCount] =
-    current.topFailingContracts.length > 0
-      ? current.topFailingContracts[0]
-      : ["N/A", 0];
+  const tweets: string[] = [];
 
-  let thread = "\n🧵 Thread Preview:\n\n";
+  tweets.push(
+    `1/ Failure patterns are shifting on testnet — here’s what’s happening 👇`
+  );
 
-  // 🔥 Tweet 1 (hook)
-  if (current.avgFailureRate === 0) {
-    thread += `1/ Testnet just hit 0% failure rate… but that’s not the full story 👇\n\n`;
-  } else if (trendText.includes("increased")) {
-    thread += `1/ Failure rate just spiked on testnet — here’s what’s actually happening 👇\n\n`;
-  } else if (trendText.includes("decreased")) {
-    thread += `1/ Testnet just stabilized… but here’s what changed 👇\n\n`;
-  } else {
-    thread += `1/ Testnet looks stable… but there’s a signal most people miss 👇\n\n`;
+  tweets.push(
+    `2/ I analyzed the last ${report.blocksAnalyzed} blocks:
+→ ${report.totalTransactions} transactions
+→ ${failureRate}% failure rate`
+  );
+
+  tweets.push(
+    `3/ ${totalFailed} failed transactions — doesn’t look alarming at first.`
+  );
+
+  if (totalFailed > 0) {
+    const [topAddr, topCount] = report.topFailingContracts[0];
+    const dominance = topCount / totalFailed;
+    const dominancePct = Math.round(dominance * 100);
+
+    if (dominance >= 0.8) {
+      tweets.push(
+        `4/ One contract caused ${dominancePct}% of failures:
+${topAddr}`
+      );
+    } else if (dominance >= 0.3) {
+      tweets.push(
+        `4/ Failures are spreading across contracts.
+
+Top contributor:
+${topAddr} (${dominancePct}%)`
+      );
+    } else {
+      tweets.push(
+        `4/ Failures are distributed — no single dominant contract.
+
+This points to broader network-level issues.`
+      );
+    }
   }
 
-  // Tweet 2
-  thread += `2/ I analyzed the last ${current.blocks} blocks:\n`;
-  thread += `→ ${current.totalTx} transactions\n`;
-  thread += `→ ${rate}% failure rate\n\n`;
+  tweets.push(
+    `5/ This usually points to:
+• Contract bugs
+• Integration issues
+• Misuse patterns`
+  );
 
-  // Tweet 3 (cleaner tone)
-  thread += `3/ ${current.totalFailed} failed transaction${current.totalFailed !== 1 ? "s" : ""} — doesn’t look alarming at first.\n\n`;
+  tweets.push(
+    `6/ Raw transaction counts don’t tell the full story.
 
-  // Tweet 4
-  if (current.totalFailed > 0) {
-    thread += `4/ But here’s the catch:\n\n`;
-    thread += `A single contract caused ${Math.round(
-      (topCount / current.totalFailed) * 100
-    )}% of failures:\n${topAddr}\n\n`;
-  } else {
-    thread += `4/ No failures detected — network is clean.\n\n`;
-  }
+Tracking failures > tracking activity.`
+  );
 
-  // Tweet 5
-  if (current.totalFailed > 0) {
-    thread += `5/ This usually points to:\n`;
-    thread += `• Contract bug\n• Integration issue\n• Misuse pattern\n\n`;
-  } else {
-    thread += `5/ This suggests strong short-term network stability.\n\n`;
-  }
+  tweets.push(
+    `7/ I’m building ArcSense to surface signals like this automatically.
 
-  // Tweet 6
-  thread += `6/ This is why raw transaction counts don’t tell the full story.\n\n`;
-  thread += `Tracking failures > tracking activity.\n\n`;
+If you’re exploring testnet seriously, this kind of data matters.`
+  );
 
-  // Tweet 7 (strong close)
-  thread += `7/ I’m building ArcSense to surface signals like this automatically.\n\n`;
-  thread += `If you’re exploring the testnet seriously, this kind of data matters.`;
-
-  return thread;
+  return tweets.join("\n\n");
 }

@@ -1,0 +1,11 @@
+ArcSense Report
+
+Blocks Analyzed: 5
+Total Transactions: 86
+Total Failed: 5
+Failure Rate: 5.81%
+
+Top Failing Contracts:
+- 0x96de58f6041d213198da2da15cabbcc771b3a490 → 3
+- 0x284c5afc100ad14a458255075324fa0a9dfd66b1 → 1
+- 0x2d84d79c852f6842abe0304b70bbaa1506add457 → 1

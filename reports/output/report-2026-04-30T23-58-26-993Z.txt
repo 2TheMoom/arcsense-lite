@@ -1,0 +1,12 @@
+
+ArcSense Report
+Time: 5/1/2026, 12:58:26 AM
+
+Blocks Analyzed: 5
+Total Transactions: 249
+Total Failed: 2
+Avg Failure Rate: 0.80%
+
+Top Failing Contracts:
+- 0x211d0200ae70fe41f97051cfa1935a66c4c600f7 → 1
+- 0xbc93a9e52c76f38bb4369bbd4d5732f0047d7473 → 1

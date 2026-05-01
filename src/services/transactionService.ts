@@ -2,14 +2,16 @@ export interface ParsedTransaction {
   hash: string;
   from: string;
   to: string | null;
+  value: string;
 }
 
-export function parseTransactions(block: any): ParsedTransaction[] {
-  if (!block || !block.transactions) return [];
+export function parseTransactions(transactions: any[]): ParsedTransaction[] {
+  if (!transactions || transactions.length === 0) return [];
 
-  return block.transactions.map((tx: any) => ({
+  return transactions.map((tx) => ({
     hash: tx.hash,
     from: tx.from,
-    to: tx.to,
+    to: tx.to ?? null,
+    value: tx.value,
   }));
 }

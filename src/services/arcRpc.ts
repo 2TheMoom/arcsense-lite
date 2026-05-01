@@ -1,38 +1,66 @@
 import axios from "axios";
-import { config } from "../config/env";
 
+const RPCS = [
+  "https://rpc.testnet.arc.network",
+  "https://rpc.drpc.testnet.arc.network",
+  "https://rpc.quicknode.testnet.arc.network",
+];
+
+let requestId = 1;
+let currentRpcIndex = 0;
+
+// Rotate RPC when one fails
+function switchRpc() {
+  currentRpcIndex = (currentRpcIndex + 1) % RPCS.length;
+  console.warn(`⚠️ Switching RPC → ${RPCS[currentRpcIndex]}`);
+}
+
+// Core RPC call with retry + fallback
+async function rpcCall(method: string, params: any[] = []) {
+  const maxRetries = RPCS.length;
+
+  for (let i = 0; i < maxRetries; i++) {
+    const rpcUrl = RPCS[currentRpcIndex];
+
+    try {
+      const response = await axios.post(
+        rpcUrl,
+        {
+          jsonrpc: "2.0",
+          id: requestId++,
+          method,
+          params,
+        },
+        {
+          timeout: 8000,
+        }
+      );
+
+      if (response.data?.result !== undefined) {
+        return response.data.result;
+      }
+
+      throw new Error("Invalid RPC response");
+    } catch (error: any) {
+      console.error(`❌ RPC Error (${rpcUrl}): ${error.message}`);
+      switchRpc();
+    }
+  }
+
+  throw new Error("🚨 All RPC endpoints failed");
+}
+
+// Public functions
 export async function getBlockNumber(): Promise<number> {
-  const res = await axios.post(config.ARC_RPC_URL, {
-    jsonrpc: "2.0",
-    method: "eth_blockNumber",
-    params: [],
-    id: 1,
-  });
-
-  return parseInt(res.data.result, 16);
+  const hex = await rpcCall("eth_blockNumber");
+  return parseInt(hex, 16);
 }
 
 export async function getBlockByNumber(blockNumber: number) {
   const hexBlock = "0x" + blockNumber.toString(16);
-
-  const res = await axios.post(config.ARC_RPC_URL, {
-    jsonrpc: "2.0",
-    method: "eth_getBlockByNumber",
-    params: [hexBlock, true],
-    id: 1,
-  });
-
-  return res.data.result;
+  return await rpcCall("eth_getBlockByNumber", [hexBlock, true]);
 }
 
-// ✅ NEW: Fetch transaction receipt
-export async function getTransactionReceipt(txHash: string) {
-  const res = await axios.post(config.ARC_RPC_URL, {
-    jsonrpc: "2.0",
-    method: "eth_getTransactionReceipt",
-    params: [txHash],
-    id: 1,
-  });
-
-  return res.data.result;
+export async function getTransactionReceipt(hash: string) {
+  return await rpcCall("eth_getTransactionReceipt", [hash]);
 }

@@ -1,0 +1,28 @@
+{
+  "blocks": 5,
+  "totalTx": 250,
+  "totalFailed": 18,
+  "avgFailureRate": 0.072,
+  "topFailingContracts": [
+    [
+      "0xbc93a9e52c76f38bb4369bbd4d5732f0047d7473",
+      6
+    ],
+    [
+      "0x61ff961f3856bbfd9e8cfd67443970b40f4f817b",
+      4
+    ],
+    [
+      "0xaf93c5b321757ca9f37992525c4889bceef76726",
+      2
+    ],
+    [
+      "0x8047a14301583caaf9e2128d5f88f9f435659d35",
+      1
+    ],
+    [
+      "0x6c1581bd9eddec33c8e30e9f1c3d82def2716154",
+      1
+    ]
+  ]
+}

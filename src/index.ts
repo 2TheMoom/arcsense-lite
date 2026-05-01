@@ -6,103 +6,92 @@ import {
 
 import { parseTransactions } from "./services/transactionService";
 import { analyzeTransactions } from "./services/analysisService";
+import { generateReport } from "./reports/reportGenerator";
 import { saveReport } from "./storage/fileStorage";
+
 import { analyzeTrend } from "./utils/trendAnalyzer";
-import { generateInsights } from "./utils/insightGenerator";
+import { generateInsights } from "./utils/insightGenerator"; // ✅ fixed name
 import { generateXPost } from "./utils/xPostGenerator";
 import { generateThread } from "./utils/threadGenerator";
 
-async function run() {
+async function runArcSense() {
   try {
     console.log("🚀 Running ArcSense Multi-Block...\n");
 
     const latestBlock = await getBlockNumber();
-    console.log("Latest Block:", latestBlock);
+    console.log(`Latest Block: ${latestBlock}\n`);
 
-    const BLOCK_RANGE = 5;
+    const BLOCKS_TO_SCAN = 5;
+    let allTransactions: any[] = [];
 
-    let totalTx = 0;
-    let totalFailed = 0;
-
-    const globalFailureMap: Record<string, number> = {};
-
-    for (let i = 0; i < BLOCK_RANGE; i++) {
+    for (let i = 0; i < BLOCKS_TO_SCAN; i++) {
       const blockNumber = latestBlock - i;
-
       const block = await getBlockByNumber(blockNumber);
-      const transactions = parseTransactions(block).slice(0, 50);
 
-      console.log(`\n🔍 Block ${blockNumber} → ${transactions.length} tx`);
+      if (!block || !block.transactions) continue;
 
-      const stats = await analyzeTransactions(
-        transactions,
-        getTransactionReceipt
-      );
-
-      totalTx += stats.total;
-      totalFailed += stats.failed;
-
-      stats.topFailingContracts.forEach(
-        ([address, count]: [string, number]) => {
-          if (!globalFailureMap[address]) {
-            globalFailureMap[address] = 0;
-          }
-          globalFailureMap[address] += count;
-        }
-      );
+      console.log(`🔍 Block ${blockNumber} → ${block.transactions.length} tx`);
+      allTransactions.push(...block.transactions);
     }
 
-    const avgFailureRate = totalTx === 0 ? 0 : totalFailed / totalTx;
+    // Parse
+    const parsed = parseTransactions(allTransactions);
 
-    const topFailingContracts = Object.entries(globalFailureMap)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
-
-    console.log(`
-📊 Multi-Block Report
-
-Blocks Analyzed: ${BLOCK_RANGE}
-Total Transactions: ${totalTx}
-Total Failed: ${totalFailed}
-Avg Failure Rate: ${(avgFailureRate * 100).toFixed(2)}%
-
-Top Failing Contracts:
-`);
-
-    topFailingContracts.forEach(([addr, count]) => {
-      console.log(`- ${addr} → ${count} failures`);
-    });
-
-    if (topFailingContracts.length === 0) {
-      console.log("No failing contracts detected.");
-    }
+    // Analyze (IMPORTANT: await + pass receipt fn)
+    const analysis = await analyzeTransactions(
+      parsed,
+      getTransactionReceipt
+    );
 
     const reportData = {
-      blocks: BLOCK_RANGE,
-      totalTx,
-      totalFailed,
-      avgFailureRate,
-      topFailingContracts,
+      blocksAnalyzed: BLOCKS_TO_SCAN,
+      totalTransactions: parsed.length,
+      totalFailed: analysis.failed,
+      avgFailureRate:
+        parsed.length === 0 ? 0 : analysis.failed / parsed.length,
+      topFailingContracts: analysis.topFailingContracts,
     };
 
-    saveReport(reportData);
+    // Report
+    const reportText = generateReport(reportData);
 
+    console.log("\n📊 Multi-Block Report\n");
+    console.log(reportText);
+
+    // Save (ONLY ONE ARG)
+    const saved = saveReport(reportData);
+
+    console.log("\n💾 Reports saved:");
+    console.log(saved.jsonPath);
+    console.log(saved.txtPath);
+
+    // Trend (RETURNS STRING — not object)
     const trend = analyzeTrend(reportData);
-    console.log(trend);
 
-    const insights = generateInsights(reportData, trend);
-    console.log(insights);
+    console.log("\n📈 Trend Analysis\n");
+    console.log(trend); // ✅ fixed (no .summary)
 
-    const xPost = generateXPost(reportData, trend);
+    // Insights
+    const insight = generateInsights(reportData, trend);
+
+    console.log("\n🧠 ArcSense Insight\n");
+    console.log(insight);
+
+    // X Post
+    const xPost = generateXPost(reportData);
+
     console.log("\n🐦 X Post Preview:\n");
     console.log(xPost);
 
-    const thread = generateThread(reportData, trend);
-    console.log(thread);
+    // Thread (RETURNS STRING — not array)
+    const thread = generateThread(reportData);
 
-  } catch (err: any) {
-    console.error("❌ Error:", err.message || err);
+    console.log("\n🧵 Thread Preview:\n");
+    console.log(thread); // ✅ fixed (no .forEach)
+
+  } catch (error: any) {
+    console.error("❌ Error:", error.message);
   }
 }
 
-run();
+runArcSense();
