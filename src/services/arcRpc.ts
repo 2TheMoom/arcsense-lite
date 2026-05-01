@@ -1,4 +1,4 @@
-import axios from "axios";
+import fetch from "node-fetch";
 
 const RPCS = [
   "https://rpc.testnet.arc.network",
@@ -6,61 +6,54 @@ const RPCS = [
   "https://rpc.quicknode.testnet.arc.network",
 ];
 
-let requestId = 1;
 let currentRpcIndex = 0;
 
-// Rotate RPC when one fails
-function switchRpc() {
-  currentRpcIndex = (currentRpcIndex + 1) % RPCS.length;
-  console.warn(`⚠️ Switching RPC → ${RPCS[currentRpcIndex]}`);
-}
-
-// Core RPC call with retry + fallback
-async function rpcCall(method: string, params: any[] = []) {
-  const maxRetries = RPCS.length;
-
-  for (let i = 0; i < maxRetries; i++) {
-    const rpcUrl = RPCS[currentRpcIndex];
+async function callRpc(method: string, params: any[]) {
+  for (let i = 0; i < RPCS.length; i++) {
+    const rpc = RPCS[currentRpcIndex];
 
     try {
-      const response = await axios.post(
-        rpcUrl,
-        {
+      const res = await fetch(rpc, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
           jsonrpc: "2.0",
-          id: requestId++,
+          id: 1,
           method,
           params,
-        },
-        {
-          timeout: 8000,
-        }
-      );
+        }),
+      });
 
-      if (response.data?.result !== undefined) {
-        return response.data.result;
-      }
+      const data = await res.json();
 
-      throw new Error("Invalid RPC response");
-    } catch (error: any) {
-      console.error(`❌ RPC Error (${rpcUrl}): ${error.message}`);
-      switchRpc();
+      if (data.error) throw new Error(data.error.message);
+
+      return data.result;
+    } catch (err) {
+      console.warn(`⚠️ RPC failed (${rpc}), switching...`);
+      currentRpcIndex = (currentRpcIndex + 1) % RPCS.length;
     }
   }
 
-  throw new Error("🚨 All RPC endpoints failed");
+  throw new Error("All RPC endpoints failed");
 }
 
-// Public functions
-export async function getBlockNumber(): Promise<number> {
-  const hex = await rpcCall("eth_blockNumber");
+// ✅ Get latest block number
+export async function getLatestBlockNumber(): Promise<number> {
+  const hex = await callRpc("eth_blockNumber", []);
   return parseInt(hex, 16);
 }
 
-export async function getBlockByNumber(blockNumber: number) {
+// ✅ Get block with transactions
+export async function getBlockByNumber(blockNumber: number): Promise<any> {
   const hexBlock = "0x" + blockNumber.toString(16);
-  return await rpcCall("eth_getBlockByNumber", [hexBlock, true]);
+
+  return await callRpc("eth_getBlockByNumber", [hexBlock, true]);
 }
 
-export async function getTransactionReceipt(hash: string) {
-  return await rpcCall("eth_getTransactionReceipt", [hash]);
+// ✅ Get transaction receipt (CRITICAL for real failures)
+export async function getTransactionReceipt(hash: string): Promise<any> {
+  return await callRpc("eth_getTransactionReceipt", [hash]);
 }

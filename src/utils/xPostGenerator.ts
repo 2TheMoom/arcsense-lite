@@ -1,51 +1,39 @@
-export function generateXPost(report: any) {
-  const failureRate = (report.avgFailureRate * 100).toFixed(2);
-  const totalFailed = report.totalFailed;
+export function generateXPost(report: any): string {
+  const total = report.total || 0;
+  const failed = report.failed || 0;
 
-  if (totalFailed === 0) {
-    return `🐦 ArcSense Update
+  const percent = total === 0
+    ? "0.00"
+    : ((failed / total) * 100).toFixed(2);
 
-Testnet activity remains stable.
+  const [topContract, topCount] =
+    report.topFailingContracts?.[0] || ["N/A", 0];
 
-0 failed transactions across the last ${report.blocksAnalyzed} blocks.
+  const dominance =
+    failed === 0 ? 0 : Math.round((topCount / failed) * 100);
 
-Tracking real testnet behavior > farming noise.
+  return `🐦 ArcSense Signal
 
-#Arc #Testnet #Web3`;
-  }
+${percent}% failure rate (${failed}/${total} tx)
 
-  const [topAddr, topCount] = report.topFailingContracts[0];
-  const dominance = topCount / totalFailed;
-  const dominancePct = Math.round(dominance * 100);
-
-  let insightLine = "";
-
-  if (dominance >= 0.8) {
-    insightLine = `One contract is responsible for ${dominancePct}% of failures:
-${topAddr}
-
-That usually points to a contract-level issue.`;
-  } else if (dominance >= 0.3) {
-    insightLine = `Failures are spreading across multiple contracts, with one leading at ${dominancePct}%:
-${topAddr}
-
-This may signal broader instability.`;
-  } else {
-    insightLine = `Failures are distributed across multiple contracts.
-
-No single dominant source detected — this suggests network-wide stress.`;
-  }
-
-  return `🐦 ArcSense Update
-
-Failure rate is now ${failureRate}% on testnet.
-
-${totalFailed} failed transactions — not alarming at first.
+Failure rate is climbing.
 
 But here’s the signal:
-${insightLine}
 
-Tracking real testnet behavior > farming noise.
+${
+  failed > 0
+    ? `${dominance}% of failures come from ONE contract:
+${topContract}`
+    : `No failing contracts detected.`
+}
 
-#Arc #Testnet #Web3`;
+That’s not random — it points to a contract-level issue.
+
+Not critical yet.
+But this is how breakpoints form.
+
+Track failures.
+Ignore noise.
+
+#Arc #Testnet #OnchainData`;
 }

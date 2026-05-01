@@ -1,0 +1,28 @@
+{
+  "total": 57,
+  "successful": 0,
+  "failed": 57,
+  "failureRate": 1,
+  "topFailingContracts": [
+    [
+      "0x73742278c31a76dbb0d2587d03ef92e6e2141023",
+      13
+    ],
+    [
+      "0x3600000000000000000000000000000000000000",
+      8
+    ],
+    [
+      "0x3df3966f5138143dce7a9cfddc2c0310ce083bb1",
+      6
+    ],
+    [
+      "0xff5cb29241f002ffed2eaa224e3e996d24a6e8d1",
+      3
+    ],
+    [
+      "0x2f4490e7c6f3dac23ffee6e71bfcb5d1ccd7d4ec",
+      3
+    ]
+  ]
+}

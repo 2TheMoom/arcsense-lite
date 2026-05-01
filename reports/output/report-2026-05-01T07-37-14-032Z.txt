@@ -1,0 +1,36 @@
+{
+  "totalTransactions": 86,
+  "successful": 79,
+  "failed": 7,
+  "failureRate": 0.08139534883720931,
+  "topFailingContracts": [
+    [
+      "0x9e05c6075f9e890fc515ef86091414c77036f8fa",
+      1
+    ],
+    [
+      "0x65a86060ffd9ddee0bbde80c2663feb2218bfd98",
+      1
+    ],
+    [
+      "0x3df3966f5138143dce7a9cfddc2c0310ce083bb1",
+      1
+    ],
+    [
+      "unknown",
+      1
+    ],
+    [
+      "0x2d84d79c852f6842abe0304b70bbaa1506add457",
+      1
+    ],
+    [
+      "0xa3d9fbd0edb10327ecb73d2c72622e505df468a2",
+      1
+    ],
+    [
+      "0xbe7477bf91526fc9988c8f33e91b6db687119d45",
+      1
+    ]
+  ]
+}
