@@ -1,61 +1,60 @@
-import { getLatestBlockNumber, getBlockByNumber, getTransactionReceipt } from "../services/arcRpc";
-import { parseTransactions } from "../services/transactionService";
+import { getLatestBlock, getTransactionReceipt } from "../services/arcRpc";
+import { getBlockTransactions } from "../services/transactionService";
 import { analyzeTransactions } from "../services/analysisService";
-import { analyzeTrend } from "../utils/trendAnalyzer";
-import { generateInsights } from "../utils/insightGenerator";
-import { generateAlerts } from "../utils/alertSystem";
+
+import { generateTrend } from "../utils/trendAnalyzer";
+import { generateInsight } from "../utils/insightGenerator";
 import { generateXPost } from "../utils/xPostGenerator";
+import { generateThread } from "../utils/threadGenerator";
+import { generateAlerts } from "../utils/alertSystem";
 
-let lastProcessedBlock = 0;
+let lastFailureRate = 0;
 
-export async function startRealtimeMonitor() {
+async function monitor() {
   console.log("⚡ Starting ArcSense Realtime Monitor...\n");
 
-  setInterval(async () => {
+  while (true) {
     try {
-      const latestBlock = await getLatestBlockNumber();
+      const block = await getLatestBlock();
+      const txs = await getBlockTransactions(block);
 
-      if (latestBlock === lastProcessedBlock) return;
+      console.log(`\n🆕 Block ${block.number} → ${txs.length} tx`);
 
-      const block = await getBlockByNumber(latestBlock);
+      if (!txs.length) continue;
 
-      console.log(`\n🆕 New Block ${latestBlock} → ${block.transactions.length} tx`);
-
-      const parsed = parseTransactions(block.transactions);
-
-      const analysis = await analyzeTransactions(
-        parsed,
+      const report = await analyzeTransactions(
+        txs,
         getTransactionReceipt
       );
 
-      const report = {
-        total: analysis.total,
-        successful: analysis.successful,
-        failed: analysis.failed,
-        failureRate: analysis.failureRate,
-        topFailingContracts: analysis.topFailingContracts,
-      };
-
-      const trend = analyzeTrend(report);
-      const insight = generateInsights(report, trend);
+      const trend = generateTrend(lastFailureRate, report.failureRate);
+      const insight = generateInsight(report, trend);
       const alerts = generateAlerts(report, trend);
 
-      console.log("\n📊 Realtime Report:", report);
+      console.log("\n📊 Report:", report);
       console.log("📈 Trend:", trend);
       console.log("🧠 Insight:", insight);
 
-      if (alerts.length) {
+      if (alerts.length > 0) {
         console.log("🚨 Alerts:");
         alerts.forEach((a) => console.log(a));
       }
 
-      // ✅ FIXED
-      const post = generateXPost(report);
+      const post = generateXPost(report, trend, insight);
       console.log("\n🐦 Realtime Signal:\n", post);
 
-      lastProcessedBlock = latestBlock;
+      const thread = generateThread(report, trend, insight);
+      if (thread) {
+        console.log("\n🧵 Thread:\n", thread);
+      }
+
+      lastFailureRate = report.failureRate;
+
+      await new Promise((res) => setTimeout(res, 3000));
     } catch (err) {
-      console.error("❌ Monitor error:", err);
+      console.log("⚠️ Error in monitor loop:", err);
     }
-  }, 5000); // every 5s
+  }
 }
+
+monitor();

@@ -1,39 +1,47 @@
-export function generateXPost(report: any): string {
-  const total = report.total || 0;
-  const failed = report.failed || 0;
+export function generateXPost(
+  report: any,
+  trend: string,
+  insight: string
+): string {
+  const rate = (report.failureRate * 100).toFixed(2);
 
-  const percent = total === 0
-    ? "0.00"
-    : ((failed / total) * 100).toFixed(2);
+  let tone = "";
 
-  const [topContract, topCount] =
-    report.topFailingContracts?.[0] || ["N/A", 0];
+  if (report.failureRate === 0) {
+    tone = "Network is clean. No execution friction detected.";
+  } else if (report.failureRate < 0.08) {
+    tone = "System looks stable on the surface.";
+  } else {
+    tone = "Failure rate is elevated.";
+  }
 
-  const dominance =
-    failed === 0 ? 0 : Math.round((topCount / failed) * 100);
+  let contractLine = "";
+  if (report.topFailingContracts.length > 0) {
+    const [contract, count] = report.topFailingContracts[0];
 
-  return `🐦 ArcSense Signal
+    if (count >= 2) {
+      contractLine = `\nRepeated failures from:\n${contract}`;
+    } else {
+      contractLine = `\nSingle-point failure detected:\n${contract}`;
+    }
+  }
 
-${percent}% failure rate (${failed}/${total} tx)
+  return `
+🐦 ArcSense Signal
 
-Failure rate is climbing.
+${rate}% failure rate (${report.failed}/${report.total} tx)
+
+${tone}
 
 But here’s the signal:
 
-${
-  failed > 0
-    ? `${dominance}% of failures come from ONE contract:
-${topContract}`
-    : `No failing contracts detected.`
-}
+${trend}
+${contractLine}
 
-That’s not random — it points to a contract-level issue.
+${insight}
 
-Not critical yet.
-But this is how breakpoints form.
+Tracking failures > tracking activity.
 
-Track failures.
-Ignore noise.
-
-#Arc #Testnet #OnchainData`;
+#Arc #Testnet #OnchainData
+`;
 }

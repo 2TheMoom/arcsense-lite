@@ -1,49 +1,46 @@
 export async function analyzeTransactions(
-  transactions: any[],
+  txs: string[],
   getReceipt: (hash: string) => Promise<any>
 ) {
-  let successful = 0;
+  let total = txs.length;
   let failed = 0;
+  let successful = 0;
+
   const contractFailures: Record<string, number> = {};
+  const contractHistory: Record<string, number> = {};
 
-  for (const tx of transactions) {
-    try {
-      const receipt = await getReceipt(tx.hash);
+  for (const hash of txs) {
+    const receipt = await getReceipt(hash);
+    if (!receipt) continue;
 
-      if (!receipt) continue;
+    if (receipt.status === "0x0") {
+      failed++;
 
-      let status = receipt.status;
-
-      // Normalize status
-      if (status === "0x1" || status === 1) {
-        successful++;
-      } else if (status === "0x0" || status === 0) {
-        failed++;
-
-        const contract = tx.to || "unknown";
-        contractFailures[contract] =
-          (contractFailures[contract] || 0) + 1;
-      } else {
-        // fallback (prevents false negatives)
-        successful++;
-      }
-
-    } catch (err) {
-      console.error("Receipt error:", err);
+      const contract = receipt.to || "unknown";
+      contractFailures[contract] = (contractFailures[contract] || 0) + 1;
+    } else {
+      successful++;
     }
   }
 
-  const total = successful + failed;
+  const failureRate = total === 0 ? 0 : failed / total;
 
   const topFailingContracts = Object.entries(contractFailures)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 5);
+    .slice(0, 3);
+
+  for (const [contract, count] of topFailingContracts) {
+    if (contract === "unknown") continue;
+    contractHistory[contract] =
+      (contractHistory[contract] || 0) + count;
+  }
 
   return {
     total,
     successful,
     failed,
-    failureRate: total === 0 ? 0 : failed / total,
+    failureRate,
     topFailingContracts,
+    contractHistory,
   };
 }

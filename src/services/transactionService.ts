@@ -1,8 +1,7 @@
-export function parseTransactions(transactions: any[]): any[] {
-  return transactions.map((tx) => ({
-    hash: tx.hash,
-    from: tx.from,
-    to: tx.to,
-    value: tx.value,
-  }));
+export async function getBlockTransactions(block: any): Promise<any[]> {
+  if (!block || !block.transactions) return [];
+
+  return block.transactions.map((tx: any) =>
+    typeof tx === "string" ? tx : tx.hash
+  );
 }
