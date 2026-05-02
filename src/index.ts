@@ -1,24 +1,13 @@
+import "dotenv/config";
 import { startMonitor } from "./realtime/monitor";
 import { JsonRpcProvider } from "ethers";
-import { RPC_URL } from "./config/env";
 
 async function main() {
-  console.log("BOOTING...");
+  console.log("BOOTING...\n");
 
-  if (!RPC_URL) {
-    throw new Error("❌ RPC_URL is missing in .env");
-  }
+  const provider = new JsonRpcProvider(process.env.RPC_URL);
 
-  // create provider
-  const provider = new JsonRpcProvider(RPC_URL);
-
-  console.log("⚡ Starting ArcSense Realtime Monitor...\n");
-
-  // ✅ matches your updated monitor signature
   await startMonitor(provider);
 }
 
-main().catch((err) => {
-  console.error("❌ Fatal error:", err);
-  process.exit(1);
-});
+main();
