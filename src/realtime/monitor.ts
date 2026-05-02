@@ -1,5 +1,3 @@
-// src/realtime/monitor.ts
-
 import { analyzeTransactions } from "../analysis/analyzer";
 import { detectTrend } from "../utils/trendDetector";
 import { generateInsight } from "../utils/insightGenerator";
@@ -23,8 +21,6 @@ export async function startMonitor(provider: any) {
   let lastBlock = await provider.getBlockNumber();
 
   const failureHistory: number[] = [];
-
-  // ✅ FIXED: contract memory defined here
   const contractMemory: Record<string, number> = {};
 
   while (true) {
@@ -32,72 +28,81 @@ export async function startMonitor(provider: any) {
       const currentBlock = await provider.getBlockNumber();
 
       if (currentBlock > lastBlock) {
-        for (let i = lastBlock + 1; i <= currentBlock; i++) {
-          const block = await provider.getBlock(i, false);
+        const block = await provider.getBlock(currentBlock);
 
-          if (!block || !block.transactions) continue;
+        const txHashes: string[] = block.transactions;
 
-          console.log(
-            `\n🆕 Block ${i} → ${block.transactions.length} tx`
+        // 🔥 Ignore small blocks (<150 tx)
+        if (txHashes.length < 150) {
+          lastBlock = currentBlock;
+          continue;
+        }
+
+        console.log(`🆕 Block ${currentBlock} → ${txHashes.length} tx\n`);
+
+        // 🔥 Sample up to 350 tx
+        const sampled = shuffleArray(txHashes).slice(0, 350);
+
+        // 🔥 Batch processing (RPC safe)
+        const BATCH_SIZE = 25;
+        let reports: any[] = [];
+
+        for (let i = 0; i < sampled.length; i += BATCH_SIZE) {
+          const batch = sampled.slice(i, i + BATCH_SIZE);
+
+          const results = await Promise.all(
+            batch.map((txHash) =>
+              analyzeTransactions([txHash], provider.getTransactionReceipt.bind(provider))
+            )
           );
 
-          // ✅ FIXED: ensure string[]
-          const txHashes: string[] = block.transactions.map(
-            (tx: any) => (typeof tx === "string" ? tx : tx.hash)
-          );
+          reports.push(...results);
 
-          // sample max 50 tx
-          const sampled: string[] = shuffleArray(txHashes).slice(0, 50);
+          await sleep(200); // throttle
+        }
 
-          // analyze
-          const report = await analyzeTransactions(
-            sampled,
-            provider.getTransactionReceipt.bind(provider)
-          );
+        // 🔥 Merge reports
+        const report = {
+          total: reports.reduce((sum, r) => sum + r.total, 0),
+          successful: reports.reduce((sum, r) => sum + r.successful, 0),
+          failed: reports.reduce((sum, r) => sum + r.failed, 0),
+          failureRate:
+            reports.reduce((sum, r) => sum + r.failed, 0) /
+            reports.reduce((sum, r) => sum + r.total, 0),
+          topFailingContracts: [],
+          contractHistory: {},
+        };
 
-          // track history
-          failureHistory.push(report.failureRate);
-          if (failureHistory.length > 10) failureHistory.shift();
-
-          // trend
-          const trend = detectTrend(failureHistory);
-
-          // ✅ FIXED: update contract memory
-          for (const [addr, count] of report.topFailingContracts) {
-            contractMemory[addr] =
-              (contractMemory[addr] || 0) + count;
-          }
-
-          // insight
-          const insight = generateInsight(
-            report,
-            trend,
-            contractMemory
-          );
-
-          // severity
-          const severity = getSeverity(
-            report.failureRate,
-            trend
-          );
-
-          // output
-          console.log("\n📊 Report:", report);
-          console.log("📈 Trend:", trend);
-          console.log("🧠 Insight:", insight);
-          console.log("🔥 Severity:", severity);
-
-          // alerts
-          console.log("🚨 Alerts:");
-
-          if (severity === "HIGH") {
-            console.log("🚨 High failure rate detected!");
-          }
-
-          if (trend.includes("rising")) {
-            console.log("📈 Failure trend increasing");
+        // Merge contract failures
+        for (const r of reports) {
+          for (const [addr, count] of r.topFailingContracts) {
+            report.contractHistory[addr] =
+              (report.contractHistory[addr] || 0) + count;
           }
         }
+
+        report.topFailingContracts = Object.entries(report.contractHistory)
+          .sort((a: any, b: any) => b[1] - a[1])
+          .slice(0, 3);
+
+        // 🔥 Track history
+        failureHistory.push(report.failureRate);
+        if (failureHistory.length > 10) failureHistory.shift();
+
+        // 🔥 Update memory
+        for (const [addr, count] of report.topFailingContracts) {
+          contractMemory[addr] = (contractMemory[addr] || 0) + (count as number);
+        }
+
+        const trend = detectTrend(failureHistory);
+        const insight = generateInsight(report, trend, contractMemory);
+        const severity = getSeverity(report.failureRate, trend);
+
+        console.log("📊 Report:", report);
+        console.log("📈 Trend:", trend);
+        console.log("🧠 Insight:", insight);
+        console.log("🔥 Severity:", severity);
+        console.log("🚨 Alerts:\n");
 
         lastBlock = currentBlock;
       }
