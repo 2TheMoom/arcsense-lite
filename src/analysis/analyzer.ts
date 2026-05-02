@@ -1,12 +1,18 @@
-type TxReceipt = {
-  status: number;
-  to?: string | null;
-};
+// src/analysis/analyzer.ts
+
+export interface AnalysisReport {
+  total: number;
+  successful: number;
+  failed: number;
+  failureRate: number;
+  topFailingContracts: [string, number][];
+  contractHistory: Record<string, number>;
+}
 
 export async function analyzeTransactions(
   txHashes: string[],
-  getReceipt: (hash: string) => Promise<TxReceipt | null>
-) {
+  getReceipt: (hash: string) => Promise<any>
+): Promise<AnalysisReport> {
   let successful = 0;
   let failed = 0;
 
@@ -16,7 +22,6 @@ export async function analyzeTransactions(
     try {
       const receipt = await getReceipt(hash);
 
-      // ❌ IMPORTANT: skip if receipt not ready
       if (!receipt) continue;
 
       if (receipt.status === 1) {
@@ -30,13 +35,12 @@ export async function analyzeTransactions(
           (contractFailures[contract] || 0) + 1;
       }
     } catch (err) {
-      // treat errors as unknown, not success
+      // Ignore RPC errors per tx
       continue;
     }
   }
 
   const total = successful + failed;
-
   const failureRate = total === 0 ? 0 : failed / total;
 
   const topFailingContracts = Object.entries(contractFailures)
