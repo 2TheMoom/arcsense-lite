@@ -1,21 +1,21 @@
 import "dotenv/config";
-import { JsonRpcProvider } from "ethers";
-import { startMonitor } from "./realtime/monitor";
+import { WebSocketProvider } from "ethers";
+import { RealtimeMonitor } from "./realtime/monitor";
+import { startWorker } from "./worker/analyzerWorker";
 
-async function main() {
-  console.log("BOOTING...");
+console.log("⚡ Booting ArcSense...");
 
-  // ✅ support both names (flexible)
-  const rpcUrl =
-    process.env.RPC_URL || process.env.ALCHEMY_RPC_URL;
+const WS_URL = process.env.WS_URL;
 
-  if (!rpcUrl) {
-    throw new Error("Missing RPC_URL or ALCHEMY_RPC_URL in .env");
-  }
-
-  const provider = new JsonRpcProvider(rpcUrl);
-
-  await startMonitor(provider);
+if (!WS_URL) {
+  throw new Error("Missing WS_URL in .env");
 }
 
-main();
+const wsProvider = new WebSocketProvider(WS_URL);
+
+// ✅ start monitor
+const monitor = new RealtimeMonitor(wsProvider);
+monitor.start();
+
+// ✅ start worker (NO CLASS)
+startWorker();

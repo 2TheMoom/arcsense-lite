@@ -1,58 +1,41 @@
-import { JsonRpcProvider } from "ethers";
-import { analyzeTransactions } from "../analysis/analyzer";
-import { generateInsight } from "../utils/insightGenerator";
-import { triggerSmartAlerts } from "../utils/alertSystem";
+import { WebSocketProvider } from "ethers";
+import { enqueue } from "../queue/txQueue";
 
-export async function startMonitor(provider: JsonRpcProvider) {
-  console.log("⚡ Starting ArcSense Realtime Monitor...\n");
+export class RealtimeMonitor {
+  private provider: WebSocketProvider;
 
-  provider.on("block", async (blockNumber: number) => {
-    try {
-      const block = await provider.getBlock(blockNumber);
+  constructor(provider: WebSocketProvider) {
+    this.provider = provider;
+  }
 
-      if (!block || !block.transactions) return;
+  start() {
+    console.log("⚡ Realtime Monitor started...");
 
-      console.log(`🆕 Block ${blockNumber} → ${block.transactions.length} tx`);
+    this.provider.on("block", async (blockNumber: number) => {
+      try {
+        const block = await this.provider.getBlock(blockNumber);
 
-      // ✅ Fix readonly array issue
-      const txHashes = [...block.transactions];
+        if (!block || !block.transactions) return;
 
-      // ✅ Sampling (performance control)
-      const SAMPLE_SIZE = Number(process.env.SAMPLE_SIZE) || 350;
-      const batch = txHashes.slice(0, SAMPLE_SIZE);
+        const txHashes = [...block.transactions]; // ✅ fix readonly issue
 
-      // ✅ FIX: pass fetch function instead of provider
-      const report = await analyzeTransactions(
-        batch,
-        async (hash: string) => {
-          return await provider.getTransaction(hash);
-        }
-      );
+        console.log(
+          `📥 Queued Block ${blockNumber} | Tx count: ${txHashes.length}`
+        );
 
-      console.log("\n📊 Report:", report);
-
-      // ✅ Correct usage (single argument)
-      const insight = generateInsight(report);
-
-      console.log("📈 Trend:", insight.trend);
-      console.log("🧠 Insight:", insight.message);
-      console.log("🔥 Severity:", insight.severity);
-
-      // ✅ Smart Alerts
-      const alerts = triggerSmartAlerts(report);
-
-      console.log("🚨 Alerts:");
-      if (alerts.length === 0) {
-        console.log("None\n");
-      } else {
-        alerts.forEach((alert, i) => {
-          console.log(`${i + 1}. ${alert}`);
+        // ✅ push into queue (NEW SYSTEM)
+        enqueue({
+          blockNumber,
+          txHashes,
         });
-        console.log();
-      }
 
-    } catch (error) {
-      console.error("❌ Monitor error:", error);
-    }
-  });
+      } catch (err: any) {
+        if (err?.error?.code === 429) {
+          console.log("⏳ Rate limited (monitor), retrying...");
+        } else {
+          console.log("⚠️ Monitor error:", err);
+        }
+      }
+    });
+  }
 }

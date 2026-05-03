@@ -1,113 +1,114 @@
-import pLimit from "p-limit";
+import { Tx } from "../types";
 
-/**
- * Final shape used across your app
- */
-export interface AnalysisReport {
-  total: number;
-  successful: number;
-  failed: number;
-  failureRate: number;
-  topFailingContracts: [string, number][];
-  contractHistory: Record<string, number>;
-}
+// persistent contract history across blocks
+const contractHistory: Record<string, number> = {};
 
-/**
- * 🔁 Retry-safe receipt fetcher
- * Prevents false negatives due to RPC lag
- */
-async function safeGetReceipt(
-  hash: string,
-  getTxReceipt: (hash: string) => Promise<any>,
-  retries = 2,
-  delayMs = 150
-): Promise<any | null> {
-  for (let i = 0; i <= retries; i++) {
-    try {
-      const receipt = await getTxReceipt(hash);
+// track previous failure rate for trend
+let lastFailureRate = 0;
 
-      if (receipt) return receipt;
+export function analyzeBlock(blockNumber: number, transactions: Tx[]) {
+  // 🔥 Dynamic sample size (60% of block, capped)
+  const SAMPLE_SIZE = Math.min(
+    Math.max(Math.floor(transactions.length * 0.6), 100),
+    300
+  );
 
-      // wait before retry (helps with pending receipts)
-      await new Promise((res) => setTimeout(res, delayMs));
-    } catch {
-      // ignore and retry
+  const sample = transactions.slice(0, SAMPLE_SIZE);
+
+  let failures = 0;
+  const contractFailures: Record<string, number> = {};
+
+  for (const tx of sample) {
+    if (tx.status === 0) {
+      failures++;
+
+      if (tx.to) {
+        contractFailures[tx.to] =
+          (contractFailures[tx.to] || 0) + 1;
+
+        // update global history
+        contractHistory[tx.to] =
+          (contractHistory[tx.to] || 0) + 1;
+      }
     }
   }
 
-  return null;
-}
+  const failureRate = (failures / sample.length) * 100;
 
-/**
- * Analyze a batch of transactions
- */
-export async function analyzeTransactions(
-  txs: any[],
-  getTxReceipt: (hash: string) => Promise<any>
-): Promise<AnalysisReport> {
-  let successful = 0;
-  let failed = 0;
+  // 📈 Trend logic
+  let trend = "Stable";
+  if (failureRate > lastFailureRate + 1) {
+    trend = "Increasing failures detected";
+  } else if (failureRate < lastFailureRate - 1) {
+    trend = "Decreasing failures";
+  }
 
-  const contractFailures: Record<string, number> = {};
-  const contractHistory: Record<string, number> = {};
+  lastFailureRate = failureRate;
 
-  // 🔥 Controlled concurrency (tune between 5–20)
-  const limit = pLimit(10);
-
-  await Promise.all(
-    txs.map((tx) =>
-      limit(async () => {
-        try {
-          if (!tx || !tx.hash) return;
-
-          // Track all contract interactions
-          if (tx.to) {
-            contractHistory[tx.to] =
-              (contractHistory[tx.to] || 0) + 1;
-          }
-
-          // ✅ Use retry-safe receipt fetch
-          const receipt = await safeGetReceipt(
-            tx.hash,
-            getTxReceipt
-          );
-
-          // 🚨 Skip if still unavailable (pending tx)
-          if (!receipt) return;
-
-          if (receipt.status === 1) {
-            successful++;
-          } else if (receipt.status === 0) {
-            failed++;
-
-            if (tx.to) {
-              contractFailures[tx.to] =
-                (contractFailures[tx.to] || 0) + 1;
-            }
-          }
-        } catch {
-          // Do NOT mark as failed — just skip
-          return;
-        }
-      })
-    )
-  );
-
-  const total = successful + failed;
-
-  const failureRate =
-    total === 0 ? 0 : failed / total;
-
-  const topFailingContracts = Object.entries(contractFailures)
+  // 🔥 Top contracts (current block)
+  const topContracts = Object.entries(contractFailures)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3);
 
-  return {
-    total,
-    successful,
-    failed,
-    failureRate,
-    topFailingContracts,
-    contractHistory,
-  };
+  // 🧠 Historical offenders
+  const historicalTop = Object.entries(contractHistory)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3);
+
+  // 🚨 Severity
+  let severity = "LOW";
+  if (failureRate > 10) severity = "HIGH";
+  else if (failureRate > 5) severity = "MEDIUM";
+
+  // 🧠 Insight
+  let insight = "Normal network activity";
+  if (failureRate > 10) {
+    insight = "High failure spike — possible contract issue or exploit";
+  } else if (failureRate > 5) {
+    insight = "Elevated failure rate — monitor closely";
+  } else if (topContracts.length > 0) {
+    insight = "Minor contract-specific failures detected";
+  }
+
+  // 🚨 Alert (LAST LINE)
+  let alert = "";
+  if (failureRate > 10) {
+    alert = "🚨 ALERT: Abnormal failure spike detected!";
+  }
+
+  // 🖨 OUTPUT
+  console.log(`\n📊 Block ${blockNumber} Analysis`);
+  console.log("────────────────────────");
+  console.log(`Tx Analyzed: ${sample.length}`);
+  console.log(
+    `Failures: ${failures} (${failureRate.toFixed(2)}%)`
+  );
+
+  console.log("\n🔥 Top Contracts:");
+  if (topContracts.length === 0) {
+    console.log("- None");
+  } else {
+    topContracts.forEach(([addr, count]) => {
+      console.log(`- ${addr} → ${count} failures`);
+    });
+  }
+
+  console.log("\n📚 Contract History:");
+  if (historicalTop.length === 0) {
+    console.log("- None");
+  } else {
+    historicalTop.forEach(([addr, count]) => {
+      console.log(`- ${addr} → ${count} total failures`);
+    });
+  }
+
+  console.log(`\n📈 Trend: ${trend}`);
+  console.log(`⚠️ Severity: ${severity}`);
+  console.log(`🧠 Insight: ${insight}`);
+
+  if (alert) {
+    console.log(`\n${alert}`);
+  }
+
+  console.log("\n");
 }
