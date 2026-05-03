@@ -1,29 +1,30 @@
-import { AnalysisReport } from "../analysis/analyzer";
+type AnalysisReport = {
+  total: number;
+  successful: number;
+  failed: number;
+  failureRate: number;
+  topFailingContracts: [string, number][];
+  contractHistory: Record<string, number>;
+};
 
-export function generateInsight(
-  report: AnalysisReport,
-  trend: string,
-  contractMemory: Record<string, number>
-): string {
-  if (report.failed === 0) {
-    if (trend === "Stable behavior") {
-      return "Sustained clean execution across recent blocks. No anomaly patterns detected.";
-    }
-    return "No failures detected. Network execution is clean.";
+export function generateInsight(report: AnalysisReport) {
+  let trend = "Stable";
+  let message = "Network operating normally.";
+  let severity = "NONE";
+
+  if (report.failureRate > 0.2) {
+    trend = "Failure rate rising";
+    message = "Elevated failure rate detected across multiple transactions.";
+    severity = "HIGH";
+  } else if (report.failureRate > 0.1) {
+    trend = "Emerging failure signal";
+    message = "Notable increase in failed transactions.";
+    severity = "MEDIUM";
+  } else if (report.failureRate > 0.02) {
+    trend = "Minor failure noise";
+    message = "Some failures detected but within normal range.";
+    severity = "LOW";
   }
 
-  if (report.failureRate > 0.15) {
-    return "Elevated failure rate detected across multiple transactions.";
-  }
-
-  if (report.failureRate > 0.05) {
-    return "Irregular failure pattern detected. Monitoring closely.";
-  }
-
-  if (report.topFailingContracts.length > 0) {
-    const [addr] = report.topFailingContracts[0];
-    return `Single failure observed from ${addr}. Early signal only.`;
-  }
-
-  return "Network mostly clean with occasional minor failures.";
+  return { trend, message, severity };
 }

@@ -1,25 +1,15 @@
-import axios from "axios";
+import { JsonRpcProvider } from "ethers";
 
-const RPC = "https://rpc.testnet.arc.network";
+let provider: JsonRpcProvider;
 
-export async function getLatestBlock(): Promise<any> {
-  const res = await axios.post(RPC, {
-    jsonrpc: "2.0",
-    method: "eth_getBlockByNumber",
-    params: ["latest", true],
-    id: 1,
-  });
-
-  return res.data.result;
+export function createProvider(rpcUrl: string) {
+  provider = new JsonRpcProvider(rpcUrl);
+  return provider;
 }
 
-export async function getTransactionReceipt(hash: string): Promise<any> {
-  const res = await axios.post(RPC, {
-    jsonrpc: "2.0",
-    method: "eth_getTransactionReceipt",
-    params: [hash],
-    id: 1,
-  });
-
-  return res.data.result;
+export function getProvider() {
+  if (!provider) {
+    throw new Error("Provider not initialized");
+  }
+  return provider;
 }

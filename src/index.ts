@@ -1,11 +1,19 @@
 import "dotenv/config";
-import { startMonitor } from "./realtime/monitor";
 import { JsonRpcProvider } from "ethers";
+import { startMonitor } from "./realtime/monitor";
 
 async function main() {
-  console.log("BOOTING...\n");
+  console.log("BOOTING...");
 
-  const provider = new JsonRpcProvider(process.env.RPC_URL);
+  // ✅ support both names (flexible)
+  const rpcUrl =
+    process.env.RPC_URL || process.env.ALCHEMY_RPC_URL;
+
+  if (!rpcUrl) {
+    throw new Error("Missing RPC_URL or ALCHEMY_RPC_URL in .env");
+  }
+
+  const provider = new JsonRpcProvider(rpcUrl);
 
   await startMonitor(provider);
 }

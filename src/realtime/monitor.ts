@@ -1,87 +1,58 @@
-import { analyzeTransactions, AnalysisReport } from "../analysis/analyzer";
+import { JsonRpcProvider } from "ethers";
+import { analyzeTransactions } from "../analysis/analyzer";
 import { generateInsight } from "../utils/insightGenerator";
+import { triggerSmartAlerts } from "../utils/alertSystem";
 
-const SAMPLE_SIZE = 350;
-const MIN_TX_THRESHOLD = 150;
-
-export async function startMonitor(provider: any) {
+export async function startMonitor(provider: JsonRpcProvider) {
   console.log("⚡ Starting ArcSense Realtime Monitor...\n");
 
-  let lastBlock = await provider.getBlockNumber();
-
-  const failureHistory: number[] = [];
-  const contractMemory: Record<string, number> = {};
-
-  while (true) {
+  provider.on("block", async (blockNumber: number) => {
     try {
-      const currentBlock = await provider.getBlockNumber();
+      const block = await provider.getBlock(blockNumber);
 
-      if (currentBlock > lastBlock) {
-        for (let i = lastBlock + 1; i <= currentBlock; i++) {
-          const block = await provider.getBlock(i, false);
+      if (!block || !block.transactions) return;
 
-          if (!block || !block.transactions) continue;
+      console.log(`🆕 Block ${blockNumber} → ${block.transactions.length} tx`);
 
-          const txs: string[] = block.transactions;
+      // ✅ Fix readonly array issue
+      const txHashes = [...block.transactions];
 
-          if (txs.length < MIN_TX_THRESHOLD) continue;
+      // ✅ Sampling (performance control)
+      const SAMPLE_SIZE = Number(process.env.SAMPLE_SIZE) || 350;
+      const batch = txHashes.slice(0, SAMPLE_SIZE);
 
-          console.log(`\n🆕 Block ${i} → ${txs.length} tx`);
-
-          const sampled = txs.slice(0, SAMPLE_SIZE);
-
-          const report: AnalysisReport = await analyzeTransactions(
-            sampled,
-            (hash: string) => provider.getTransactionReceipt(hash)
-          );
-
-          // track history
-          failureHistory.push(report.failureRate);
-          if (failureHistory.length > 5) failureHistory.shift();
-
-          // trend detection
-          let trend = "Insufficient data";
-          if (failureHistory.length >= 3) {
-            const [a, b, c] = failureHistory.slice(-3);
-
-            if (c > b && b > a) trend = "Failure rate rising";
-            else if (c < b && b < a) trend = "Failures decreasing";
-            else if (c === 0) trend = "Stable behavior";
-            else trend = "Minor failure noise";
-          }
-
-          // contract memory aggregation
-          for (const [addr, count] of report.topFailingContracts) {
-            contractMemory[addr] =
-              (contractMemory[addr] || 0) + count;
-          }
-
-          const insight = generateInsight(report, trend, contractMemory);
-
-          // severity
-          let severity = "NONE";
-          if (report.failureRate > 0.2) severity = "HIGH";
-          else if (report.failureRate > 0.05) severity = "MEDIUM";
-          else if (report.failureRate > 0) severity = "LOW";
-
-          console.log("📊 Report:", report);
-          console.log("📈 Trend:", trend);
-          console.log("🧠 Insight:", insight);
-          console.log("🔥 Severity:", severity);
-          console.log("🚨 Alerts:");
-
-          if (severity === "HIGH") {
-            console.log("⚠️ High failure spike detected");
-          }
+      // ✅ FIX: pass fetch function instead of provider
+      const report = await analyzeTransactions(
+        batch,
+        async (hash: string) => {
+          return await provider.getTransaction(hash);
         }
+      );
 
-        lastBlock = currentBlock;
+      console.log("\n📊 Report:", report);
+
+      // ✅ Correct usage (single argument)
+      const insight = generateInsight(report);
+
+      console.log("📈 Trend:", insight.trend);
+      console.log("🧠 Insight:", insight.message);
+      console.log("🔥 Severity:", insight.severity);
+
+      // ✅ Smart Alerts
+      const alerts = triggerSmartAlerts(report);
+
+      console.log("🚨 Alerts:");
+      if (alerts.length === 0) {
+        console.log("None\n");
+      } else {
+        alerts.forEach((alert, i) => {
+          console.log(`${i + 1}. ${alert}`);
+        });
+        console.log();
       }
 
-      await new Promise((res) => setTimeout(res, 3000));
-    } catch (err) {
-      console.error("Monitor error:", err);
-      await new Promise((res) => setTimeout(res, 5000));
+    } catch (error) {
+      console.error("❌ Monitor error:", error);
     }
-  }
+  });
 }
