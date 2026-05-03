@@ -1,68 +1,46 @@
 import { JsonRpcProvider } from "ethers";
 import { dequeue } from "../queue/txQueue";
-import { analyzeBlock } from "../analysis/analyzer";
-import { Tx } from "../types";
+import { analyzeBlock } from "../analysis/analyzeBlock";
 
-const RPC_URL = process.env.RPC_URL!;
-const provider = new JsonRpcProvider(RPC_URL);
+export class AnalyzerWorker {
+  private provider: JsonRpcProvider;
 
-// tuning
-const MAX_TX_PER_BLOCK = 200;
-const BATCH_SIZE = 15;
-const DELAY_MS = 150;
+  constructor(rpcUrl: string) {
+    this.provider = new JsonRpcProvider(rpcUrl);
+  }
 
-function sleep(ms: number) {
-  return new Promise((res) => setTimeout(res, ms));
-}
+  start() {
+    console.log("🧠 Analyzer Worker started...");
 
-export async function startWorker() {
-  console.log("🧠 Analyzer Worker started...");
+    setInterval(async () => {
+      const job = dequeue();
+      if (!job) return;
 
-  while (true) {
-    const job = dequeue();
+      const txHashes = job.txHashes;
+      const total = txHashes.length;
 
-    if (!job) {
-      await sleep(300);
-      continue;
-    }
+      // 🔥 Dynamic Sampling Logic
+      let sampleSize: number;
 
-    try {
-      const txHashes = job.txHashes.slice(0, MAX_TX_PER_BLOCK);
-      const receipts: Tx[] = [];
+      if (total <= 100) sampleSize = total;
+      else if (total <= 300) sampleSize = Math.floor(total * 0.6);
+      else if (total <= 800) sampleSize = Math.floor(total * 0.4);
+      else sampleSize = 200;
 
-      for (let i = 0; i < txHashes.length; i += BATCH_SIZE) {
-        const batch = txHashes.slice(i, i + BATCH_SIZE);
+      const sampled = txHashes.slice(0, sampleSize);
 
-        const results = await Promise.allSettled(
-          batch.map((hash) =>
-            provider.getTransactionReceipt(hash)
-          )
-        );
+      const receipts = [];
 
-        for (const res of results) {
-          if (res.status === "fulfilled" && res.value) {
-            receipts.push({
-              hash: res.value.hash,
-              from: res.value.from,
-              to: res.value.to,
-              value: "0",
-              status: res.value.status ?? 0,
-            });
-          }
+      for (const hash of sampled) {
+        try {
+          const receipt = await this.provider.getTransactionReceipt(hash);
+          if (receipt) receipts.push(receipt);
+        } catch {
+          // ignore RPC errors silently
         }
-
-        await sleep(DELAY_MS);
       }
 
       analyzeBlock(job.blockNumber, receipts);
-
-    } catch (err: any) {
-      if (err?.error?.code === 429) {
-        console.log("⏳ Rate limited, backing off...");
-        await sleep(2000);
-      } else {
-        console.log("⚠️ Worker error:", err);
-      }
-    }
+    }, 1000);
   }
 }
