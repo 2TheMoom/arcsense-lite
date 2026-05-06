@@ -1,94 +1,70 @@
+import { provider } from "../utils/provider";
 import {
-  updateContractStats,
-  getTopContracts,
-  computeTrend,
-} from "./state";
+  trackContractFailure,
+  updateFailureRate,
+} from "../storage/stateStorage";
 
-type Receipt = {
-  to: string | null;
-  status: number | null;
+const sleep = (ms: number) =>
+  new Promise((res) => setTimeout(res, ms));
+
+export type BlockReport = {
+  blockNumber: number;
+  totalTx: number;
+  failedTx: number;
+  failureRate: number;
+  topFailingContracts: Record<string, number>;
 };
 
-export function analyzeBlock(blockNumber: number, receipts: Receipt[]) {
-  const totalTx = receipts.length;
+export async function analyzeBlock(
+  blockNumber: number
+): Promise<BlockReport | null> {
+  const block = await provider.getBlock(blockNumber, true);
 
-  let failures = 0;
-  const contractFailures: Record<string, number> = {};
+  if (!block || !block.transactions) return null;
 
-  for (const r of receipts) {
-    const success = r.status === 1;
+  const totalTx = block.transactions.length;
+  let failed = 0;
+  const localContractFailures: Record<string, number> = {};
 
-    if (!success) {
-      failures++;
+  for (const tx of block.transactions) {
+    // Arc RPC returns strings OR objects — handle both safely
+    const txHash: string | null =
+      typeof tx === "string"
+        ? tx
+        : typeof tx === "object" && tx !== null && "hash" in tx
+        ? (tx as { hash: string }).hash
+        : null;
 
-      if (r.to) {
-        contractFailures[r.to] = (contractFailures[r.to] || 0) + 1;
+    if (!txHash) continue; // skip if hash is somehow missing
+
+    try {
+      const receipt = await provider.getTransactionReceipt(txHash);
+
+      if (!receipt) continue;
+
+      if (receipt.status === 0) {
+        failed++;
+        const addr = receipt.to || "unknown";
+        trackContractFailure(addr);
+        localContractFailures[addr] =
+          (localContractFailures[addr] || 0) + 1;
       }
-    }
 
-    // ✅ use new state system
-    updateContractStats(r.to, success);
-  }
-
-  const failureRate = totalTx === 0 ? 0 : (failures / totalTx) * 100;
-
-  const trend = computeTrend(failureRate);
-
-  // ⚠️ Severity
-  let severity = "LOW";
-  if (failureRate > 10) severity = "HIGH";
-  else if (failureRate > 5) severity = "MEDIUM";
-
-  // 🧠 Insight
-  let insight = "Normal network activity";
-  if (severity === "MEDIUM") {
-    insight = "Elevated failure rate — monitor closely";
-  } else if (severity === "HIGH") {
-    insight = "High failure rate detected — possible incident";
-  } else if (failures > 0) {
-    insight = "Minor contract-specific failures detected";
-  }
-
-  // 🔥 Top contracts (current block)
-  const topContracts = Object.entries(contractFailures)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3);
-
-  // 📚 Global history
-  const history = getTopContracts(3);
-
-  // 🖨️ Output
-  console.log(`\n📊 Block ${blockNumber} Analysis`);
-  console.log("────────────────────────");
-  console.log(`Tx Analyzed: ${totalTx}`);
-  console.log(`Failures: ${failures} (${failureRate.toFixed(2)}%)\n`);
-
-  console.log("🔥 Top Contracts:");
-  if (topContracts.length === 0) console.log("- None");
-  else {
-    for (const [addr, count] of topContracts) {
-      console.log(`- ${addr} → ${count} failures`);
+      await sleep(25);
+    } catch (err: any) {
+      console.log("Tx error:", err.message);
+      await sleep(100);
     }
   }
 
-  console.log("\n📚 Contract History:");
-  if (history.length === 0) console.log("- None");
-  else {
-    for (const c of history) {
-      console.log(`- ${c.address} → ${c.totalFailures} total failures`);
-    }
-  }
+  const failureRate = totalTx === 0 ? 0 : failed / totalTx;
+  updateFailureRate(failureRate);
 
-  console.log(`\n📈 Trend: ${trend}`);
-  console.log(`⚠️ Severity: ${severity}`);
-  console.log(`🧠 Insight: ${insight}`);
-
-  // 🚨 Alert (last line)
-  if (severity === "HIGH") {
-    console.log(
-      `🚨 Alert: Failure rate exceeded threshold (${failureRate.toFixed(2)}%)`
-    );
-  }
-
-  console.log("\n");
+  return {
+    blockNumber,
+    totalTx,
+    failedTx: failed,
+    failureRate,
+    topFailingContracts: localContractFailures,
+  };
 }
