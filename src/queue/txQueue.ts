@@ -1,14 +1,11 @@
-type Job = {
-  blockNumber: number;
-  txHashes: string[];
-};
+import { Job } from "../types";
 
 const queue: Job[] = [];
 
-export function enqueue(job: Job) {
+export function enqueueJob(job: Job) {
   queue.push(job);
 }
 
-export function dequeue(): Job | undefined {
+export function dequeueJob(): Job | undefined {
   return queue.shift();
 }

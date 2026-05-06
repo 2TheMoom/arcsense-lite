@@ -1,29 +1,41 @@
-import fs from "fs";
-import path from "path";
+let failureRates: number[] = [];
+let contractFailures: Record<string, number> = {};
 
-const STATE_FILE = path.join(__dirname, "../../data/state.json");
+export function updateFailureRate(rate: number) {
+  failureRates.push(rate);
 
-type State = {
-  contractHistory: Record<string, number>;
-  lastFailureRate: number;
-};
-
-const defaultState: State = {
-  contractHistory: {},
-  lastFailureRate: 0,
-};
-
-export function loadState(): State {
-  try {
-    if (!fs.existsSync(STATE_FILE)) return defaultState;
-    const raw = fs.readFileSync(STATE_FILE, "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return defaultState;
+  if (failureRates.length > 20) {
+    failureRates.shift();
   }
 }
 
-export function saveState(state: State) {
-  fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+export function getTrend(): string {
+  if (failureRates.length < 5) return "Insufficient data";
+
+  const recent = failureRates.slice(-5);
+  const avgRecent =
+    recent.reduce((a, b) => a + b, 0) / recent.length;
+
+  const past = failureRates.slice(0, -5);
+  const avgPast =
+    past.reduce((a, b) => a + b, 0) / (past.length || 1);
+
+  if (avgRecent > avgPast * 1.2)
+    return "Failure rate rising";
+
+  if (avgRecent < avgPast * 0.8)
+    return "Failure rate dropping";
+
+  return "Stable activity";
+}
+
+export function trackContractFailure(address: string) {
+  if (!address) address = "unknown";
+
+  contractFailures[address] =
+    (contractFailures[address] || 0) + 1;
+}
+
+export function getContractHistory() {
+  return contractFailures;
 }

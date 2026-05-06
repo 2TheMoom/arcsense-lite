@@ -1,22 +1,57 @@
 import "dotenv/config";
-import { WebSocketProvider } from "ethers";
-import { RealtimeMonitor } from "./realtime/monitor";
-import { AnalyzerWorker } from "./worker/analyzerWorker";
+import express from "express";
+import cors from "cors";
+import { analyzeBlock } from "./analysis/analyzeBlock";
+import { pushBlockReport } from "./analysis/reportGenerator";
 
-console.log("⚡ Booting ArcSense...");
+// ── API server ────────────────────────────────────────────────
+const app = express();
+app.use(cors());
 
-const WS_URL = process.env.WS_URL;
-const RPC_URL = process.env.RPC_URL;
+let latestReports: any[] = [];
 
-if (!WS_URL || !RPC_URL) {
-  throw new Error("Missing WS_URL or RPC_URL in .env");
+app.get("/reports", (req, res) => {
+  res.json(latestReports.slice(-50));
+});
+
+app.listen(3001, () => {
+  console.log("📡 API running on http://localhost:3001");
+});
+
+// ── Engine ────────────────────────────────────────────────────
+async function start() {
+  console.log("🚀 Signal Engine started...");
+
+  let currentBlock = await getLatestBlock();
+
+  while (true) {
+    try {
+      const report = await analyzeBlock(currentBlock);
+
+      if (report) {
+        pushBlockReport(report);
+
+        // feed the API
+        latestReports.push(report);
+        if (latestReports.length > 200) latestReports.shift();
+      }
+
+      currentBlock++;
+
+      await sleep(1500);
+    } catch (err) {
+      console.log("Main loop error:", err);
+      await sleep(3000);
+    }
+  }
 }
 
-// 🌐 Realtime Monitor
-const wsProvider = new WebSocketProvider(WS_URL);
-const monitor = new RealtimeMonitor(wsProvider);
-monitor.start();
+async function getLatestBlock() {
+  const { provider } = await import("./utils/provider");
+  return await provider.getBlockNumber();
+}
 
-// 🧠 Worker
-const worker = new AnalyzerWorker(RPC_URL);
-worker.start();
+const sleep = (ms: number) =>
+  new Promise((res) => setTimeout(res, ms));
+
+start();

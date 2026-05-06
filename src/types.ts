@@ -1,12 +1,18 @@
-export interface Tx {
-  hash: string;
-  from: string;
-  to: string | null;
-  value: string;
-  status: number;
-}
+export type ContractStats = {
+  calls: number;
+  success: number;
+  fail: number;
+};
 
-export interface TxJob {
+export type BlockReport = {
   blockNumber: number;
-  txHashes: string[];
-}
+  total: number;
+  successful: number;
+  failed: number;
+  failureRate: number;
+  contractStats: Record<string, ContractStats>;
+};
+
+export type Job = {
+  blockNumber: number;
+};
