@@ -1,13 +1,15 @@
 {
   "name": "arcsense-lite",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Lightweight intelligence agent for Arc Testnet activity",
+  "main": "dist/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
   },
   "keywords": [],
-  "author": "",
+  "author": "Abu Olumi",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
@@ -19,13 +21,13 @@
     "node-cron": "^4.2.1",
     "node-fetch": "^2.7.0",
     "p-limit": "^7.3.0",
-    "twitter-api-v2": "^1.29.0"
+    "twitter-api-v2": "^1.29.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
-    "@types/node": "^25.6.0",
-    "ts-node": "^10.9.2",
-    "typescript": "^6.0.3"
+    "@types/node": "^25.6.0"
   }
 }
