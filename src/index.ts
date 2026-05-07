@@ -6,7 +6,9 @@ import { pushBlockReport } from "./analysis/reportGenerator";
 
 // ── API server ────────────────────────────────────────────────
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: ["https://arcsense-lite.vercel.app", "http://localhost:5173"],
+}));
 
 let latestReports: any[] = [];
 
