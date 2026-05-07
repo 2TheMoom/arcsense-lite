@@ -482,7 +482,7 @@ export default function ArcSenseDashboard() {
   useEffect(() => {
     const fetchReports = async () => {
       try {
-        const res  = await fetch("arcsense-lite-production.up.railway.app");
+        const res  = await fetch("arcsense-lite-production.up.railway.app/api/reports");
         const data = await res.json();
 
         const mapped = data.map((r) => ({
