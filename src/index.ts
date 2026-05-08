@@ -10,10 +10,18 @@ app.use(cors({
   origin: ["https://arcsense-lite.vercel.app", "http://localhost:5173"],
 }));
 
-let latestReports: any[] = [];
+let latestReports: any[]    = [];
+let totalBlocksScanned      = 0;
+let totalAlertsTriggered    = 0;
 
 app.get("/reports", (req, res) => {
-  res.json(latestReports.slice(-50));
+  res.json({
+    meta: {
+      totalBlocksScanned,
+      totalAlertsTriggered,
+    },
+    reports: latestReports.slice(-200),
+  });
 });
 
 app.listen(3001, () => {
@@ -33,13 +41,16 @@ async function start() {
       if (report) {
         pushBlockReport(report);
 
-        // feed the API
+        // Feed the API
         latestReports.push(report);
-        if (latestReports.length > 200) latestReports.shift();
+        if (latestReports.length > 500) latestReports.shift();
+
+        // Persistent counters — never reset
+        totalBlocksScanned++;
+        if (report.failureRate >= 0.10) totalAlertsTriggered++;
       }
 
       currentBlock++;
-
       await sleep(1500);
     } catch (err) {
       console.log("Main loop error:", err);
