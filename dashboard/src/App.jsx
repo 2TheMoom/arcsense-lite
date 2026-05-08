@@ -53,6 +53,39 @@ function isRealAddr(addr) {
   return addr && addr !== "unknown" && addr.startsWith("0x") && addr.length > 10;
 }
 
+// ── Behavior classification ───────────────────────────────────
+function classifyContract(addr, totalFailures, blocksAppearedIn, totalBlocks, firstSeen, lastSeen) {
+  const recentBlocks  = totalBlocks > 0 ? lastSeen >= totalBlocks - 5 : false;
+  const blockSpread   = blocksAppearedIn;
+  const failurePerBlock = blocksAppearedIn > 0 ? totalFailures / blocksAppearedIn : 0;
+
+  if (totalFailures >= 10 && failurePerBlock >= 2)
+    return { label: "HIGH FREQUENCY FAILER", icon: "📛", color: C.crimson, bg: C.crimsonG };
+  if (blockSpread >= 5)
+    return { label: "REPEAT OFFENDER", icon: "⚠️", color: C.amber, bg: C.amberG };
+  if (recentBlocks && totalFailures >= 2)
+    return { label: "NEW FAILURE", icon: "🆕", color: C.navyL, bg: C.navyG };
+  if (failurePerBlock >= 1.5)
+    return { label: "RECURRING PATTERN", icon: "🔄", color: C.amber, bg: C.amberG };
+  return { label: "OCCASIONAL FAILURE", icon: "🔍", color: C.muted, bg: "transparent" };
+}
+
+// ── Build contract history with metadata ─────────────────────
+function buildContractHistory(blocks) {
+  const history = {};
+  blocks.forEach((b, idx) => {
+    for (const [addr, count] of Object.entries(b.topFailing || {})) {
+      if (!history[addr]) {
+        history[addr] = { total: 0, blocks: [], firstIdx: idx, lastIdx: idx };
+      }
+      history[addr].total += count;
+      history[addr].blocks.push(b.blockNumber);
+      history[addr].lastIdx = idx;
+    }
+  });
+  return history;
+}
+
 // ── ArcSense logo mark ────────────────────────────────────────
 function ArcSenseLogo({ size = 36 }) {
   return (
@@ -133,6 +166,351 @@ function ChartTooltip({ active, payload, label }) {
   );
 }
 
+// ── Filter badge ──────────────────────────────────────────────
+function FilterBadge({ addr, classification, onClear }) {
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 8,
+      background: classification.bg,
+      border: `1px solid ${classification.color}44`,
+      padding: "6px 12px", flexShrink: 0,
+      animation: "fadeIn 0.3s ease",
+    }}>
+      <span style={{ fontSize: 12 }}>{classification.icon}</span>
+      <div>
+        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 2, color: C.mutedL }}>FILTERING BY CONTRACT</div>
+        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: classification.color, fontWeight: 700 }}>{shortAddr(addr)}</div>
+      </div>
+      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 1, color: classification.color, marginLeft: 4 }}>{classification.label}</span>
+      <button onClick={onClear} style={{
+        marginLeft: "auto", background: "none", border: `1px solid ${C.borderL}`,
+        color: C.muted, cursor: "pointer", fontSize: 10,
+        padding: "2px 8px", borderRadius: 1, fontFamily: "'Barlow Condensed', sans-serif",
+        letterSpacing: 1,
+      }}>✕ CLEAR</button>
+    </div>
+  );
+}
+
+// ── Scoped stats (when contract is selected) ──────────────────
+function ScopedStatsRow({ blocks, selectedContract, isMobile }) {
+  const relevantBlocks = blocks.filter(b => b.topFailing?.[selectedContract]);
+  const totalFailures  = relevantBlocks.reduce((s, b) => s + (b.topFailing?.[selectedContract] || 0), 0);
+  const failureRate    = relevantBlocks.length > 0
+    ? ((relevantBlocks.reduce((s, b) => s + (b.topFailing?.[selectedContract] || 0), 0) /
+        relevantBlocks.reduce((s, b) => s + b.totalTx, 0)) * 100).toFixed(2)
+    : "0.00";
+  const firstBlock = relevantBlocks[0]?.blockNumber;
+  const lastBlock  = relevantBlocks[relevantBlocks.length - 1]?.blockNumber;
+  const rateFloat  = parseFloat(failureRate);
+
+  const stats = [
+    { label: "BLOCKS APPEARED IN", value: relevantBlocks.length.toString(), sub: "affected blocks", size: 24, accent: C.navy, color: C.charcoal },
+    { label: "TOTAL FAILURES",     value: totalFailures.toString(),          sub: "caused by contract", size: totalFailures > 5 ? 30 : 24,
+      accent: totalFailures > 0 ? C.crimson : C.navy, color: totalFailures > 0 ? C.crimson : C.charcoal,
+      bg: totalFailures > 0 ? C.crimsonG : "transparent" },
+    { label: "CONTRACT FAIL RATE", value: `${failureRate}%`,                 sub: "of txs in those blocks", size: rateFloat >= 10 ? 30 : 24,
+      accent: rateFloat >= 10 ? C.crimson : rateFloat >= 5 ? C.amber : C.navy,
+      color:  rateFloat >= 10 ? C.crimson : rateFloat >= 5 ? C.amber : C.charcoal,
+      bg:     rateFloat >= 10 ? C.crimsonG : rateFloat >= 5 ? C.amberG : "transparent" },
+    { label: "FIRST SEEN",  value: firstBlock ? `#${firstBlock.toLocaleString()}` : "—", sub: "block number", size: 16, accent: C.navy, color: C.charcoal },
+    { label: "LAST SEEN",   value: lastBlock  ? `#${lastBlock.toLocaleString()}`  : "—", sub: "block number", size: 16, accent: C.navy, color: C.charcoal, spanFull: true },
+  ];
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(5,1fr)", gap: isMobile ? 8 : 10, flexShrink: 0 }}>
+      {stats.map((s, i) => (
+        <HudPanel key={i} accent={s.accent} style={{
+          padding: isMobile ? "12px 14px" : "14px 18px",
+          background: s.bg || C.panel,
+          gridColumn: isMobile && s.spanFull ? "1 / -1" : "auto",
+        }}>
+          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 2, color: s.color === C.charcoal ? C.mutedL : s.color, marginBottom: 6, opacity: 0.8 }}>{s.label}</div>
+          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: isMobile ? s.size - 2 : s.size, color: s.color, lineHeight: 1 }}>{s.value}</div>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: C.mutedL, marginTop: 4 }}>{s.sub}</div>
+        </HudPanel>
+      ))}
+    </div>
+  );
+}
+
+// ── Global stats row ──────────────────────────────────────────
+function StatsRow({ blocks, isMobile, meta }) {
+  const total    = blocks.reduce((s, b) => s + b.totalTx, 0);
+  const failed   = blocks.reduce((s, b) => s + b.failedTx, 0);
+  const avgRate  = blocks.length ? (blocks.reduce((s, b) => s + b.failureRate, 0) / blocks.length * 100).toFixed(2) : "0.00";
+  const avgFloat = parseFloat(avgRate);
+  const blocksScanned   = meta.totalBlocksScanned || blocks.length;
+  const alertsTriggered = meta.totalAlertsTriggered || 0;
+
+  const stats = [
+    { label: "BLOCKS SCANNED",     value: blocksScanned.toLocaleString(),    sub: "processed",   size: 24, accent: C.navy,    color: C.charcoal, spanFull: false },
+    { label: "TOTAL TRANSACTIONS", value: total.toLocaleString(),             sub: "on-chain",    size: 24, accent: C.navy,    color: C.charcoal, spanFull: false },
+    { label: "TOTAL FAILURES",     value: failed.toLocaleString(),            sub: "detected",    size: failed > 0 ? 30 : 24,
+      accent: failed > 0 ? C.crimson : C.navy, color: failed > 0 ? C.crimson : C.charcoal, bg: failed > 0 ? C.crimsonG : "transparent", spanFull: false },
+    { label: "AVG FAILURE RATE",   value: `${avgRate}%`,                      sub: "rolling avg", size: avgFloat >= 10 ? 30 : avgFloat >= 5 ? 28 : 24,
+      accent: avgFloat >= 10 ? C.crimson : avgFloat >= 5 ? C.amber : C.navy,
+      color:  avgFloat >= 10 ? C.crimson : avgFloat >= 5 ? C.amber : C.charcoal,
+      bg:     avgFloat >= 10 ? C.crimsonG : avgFloat >= 5 ? C.amberG : "transparent", spanFull: false },
+    { label: "ALERTS TRIGGERED",   value: alertsTriggered.toLocaleString(),   sub: "≥10% spikes", size: alertsTriggered > 0 ? 30 : 24,
+      accent: alertsTriggered > 0 ? C.crimson : C.navy, color: alertsTriggered > 0 ? C.crimson : C.charcoal,
+      bg: alertsTriggered > 0 ? C.crimsonG : "transparent", spanFull: true },
+  ];
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(5,1fr)", gap: isMobile ? 8 : 10, flexShrink: 0 }}>
+      {stats.map((s, i) => (
+        <HudPanel key={i} accent={s.accent} style={{
+          padding: isMobile ? "12px 14px" : "14px 18px",
+          background: s.bg || C.panel,
+          gridColumn: isMobile && s.spanFull ? "1 / -1" : "auto",
+        }}>
+          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 2, color: s.color === C.charcoal ? C.mutedL : s.color, marginBottom: 6, opacity: 0.8 }}>{s.label}</div>
+          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: isMobile ? s.size - 4 : s.size, color: s.color, lineHeight: 1 }}>{s.value}</div>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: C.mutedL, marginTop: 4 }}>{s.sub}</div>
+        </HudPanel>
+      ))}
+    </div>
+  );
+}
+
+// ── Block feed ────────────────────────────────────────────────
+function BlockFeed({ blocks, isMobile, selectedContract }) {
+  const ref = useRef(null);
+
+  const filtered = selectedContract
+    ? blocks.filter(b => b.topFailing?.[selectedContract])
+    : blocks;
+
+  useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight; }, [filtered]);
+
+  const label = selectedContract ? `FILTERED · ${shortAddr(selectedContract)}` : "BLOCK FEED";
+
+  return (
+    <HudPanel label={label} accent={selectedContract ? C.crimson : C.navy} style={{ display: "flex", flexDirection: "column", overflow: "hidden", height: isMobile ? 300 : "100%", minHeight: 0 }}>
+      <div style={{ padding: "12px 16px 10px", borderBottom: `1px solid ${C.borderL}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: selectedContract ? C.crimson : C.mutedL }}>
+          {selectedContract ? "CONTRACT VIEW" : "LIVE STREAM"}
+        </span>
+        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL }}>{filtered.length}</span>
+      </div>
+      <div ref={ref} style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>
+        {filtered.length === 0 ? (
+          <div style={{ padding: "24px 16px", fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: C.mutedL }}>
+            No blocks found for this contract.
+          </div>
+        ) : filtered.slice(-60).map((b, i, arr) => {
+          const isNew  = !selectedContract && i >= arr.length - 3;
+          const isCrit = b.failureRate >= 0.15;
+          const isWarn = b.failureRate >= 0.10;
+          const contractFails = selectedContract ? (b.topFailing?.[selectedContract] || 0) : 0;
+          const rowBg  = isCrit ? C.crimsonG : isWarn ? C.amberG : isNew ? C.navyG : "transparent";
+          const topEntry = !selectedContract
+            ? Object.entries(b.topFailing || {}).sort((a, z) => z[1] - a[1])[0]
+            : null;
+          const topAddr = topEntry?.[0] || null;
+
+          return (
+            <div key={b.blockNumber} style={{ padding: "7px 16px", borderLeft: `2px solid ${isCrit ? C.crimson : isWarn ? C.amber : isNew ? C.navy : selectedContract ? C.crimson + "66" : C.borderL}`, background: rowBg, transition: "background 0.8s", animation: i === arr.length - 1 ? "fadeIn 0.4s ease" : "none" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: isCrit ? C.crimson : isNew ? C.navy : C.muted }}>#{b.blockNumber.toLocaleString()}</span>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL }}>{b.totalTx}tx</span>
+                  {selectedContract ? (
+                    <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 12, letterSpacing: 1, color: C.crimson }}>
+                      {contractFails} FAIL
+                    </span>
+                  ) : (
+                    <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: isCrit || isWarn ? 12 : 11, letterSpacing: 1, color: isCrit ? C.crimson : isWarn ? C.amber : C.navy }}>
+                      {b.failedTx > 0 ? `${b.failedTx} FAIL` : "OK"}
+                    </span>
+                  )}
+                </div>
+              </div>
+              {topAddr && !selectedContract && (
+                <div style={{ marginTop: 2 }}>
+                  {isRealAddr(topAddr)
+                    ? <a href={explorerUrl(topAddr)} target="_blank" rel="noopener noreferrer" title={topAddr} style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: isCrit ? C.crimson : C.amber, textDecoration: "none", borderBottom: `1px dashed ${isCrit ? C.crimson : C.amber}44` }}>{shortAddr(topAddr)}</a>
+                    : <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL }}>unknown</span>
+                  }
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </HudPanel>
+  );
+}
+
+// ── Chart ─────────────────────────────────────────────────────
+function FailureChart({ chartData, isMobile, selectedContract }) {
+  const spikeRanges = [];
+  let inSpike = false, spikeStart = null;
+  chartData.forEach((d, i) => {
+    if (d.rate >= 10 && !inSpike) { inSpike = true; spikeStart = d.block; }
+    else if (d.rate < 10 && inSpike) { inSpike = false; spikeRanges.push({ x1: spikeStart, x2: chartData[i - 1]?.block }); }
+  });
+  if (inSpike && spikeStart) spikeRanges.push({ x1: spikeStart, x2: chartData[chartData.length - 1]?.block });
+
+  const chartLabel = selectedContract
+    ? `CONTRACT FAILURES · ${shortAddr(selectedContract)}`
+    : "FAILURE RATE · LAST 30 BLOCKS";
+
+  return (
+    <HudPanel label={chartLabel} accent={selectedContract ? C.crimson : C.navy} style={{ display: "flex", flexDirection: "column", height: isMobile ? "auto" : "100%", overflow: "hidden", minHeight: 0 }}>
+      <div style={{ height: isMobile ? 200 : "100%", padding: "16px 8px 0 0", minHeight: 0, flexShrink: isMobile ? 0 : 1, flex: isMobile ? "none" : 1 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chartData} margin={{ top: 6, right: 16, bottom: 0, left: 0 }}>
+            <XAxis dataKey="block" tick={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, fill: C.mutedL }} axisLine={{ stroke: C.borderL }} tickLine={false} tickFormatter={v => String(v).slice(-4)} interval="preserveStartEnd" />
+            <YAxis tick={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, fill: C.mutedL }} axisLine={false} tickLine={false} tickFormatter={v => `${v}%`} domain={[0, "auto"]} width={30} />
+            <Tooltip content={<ChartTooltip />} cursor={{ stroke: C.border, strokeWidth: 1, strokeDasharray: "4 2" }} />
+            <ReferenceArea y1={10} y2={15}  fill={C.amberZ}   fillOpacity={1} />
+            <ReferenceArea y1={15} y2={100} fill={C.crimsonZ} fillOpacity={1} />
+            {spikeRanges.map((r, i) => <ReferenceArea key={i} x1={r.x1} x2={r.x2} fill={C.crimsonG} fillOpacity={1} />)}
+            <ReferenceLine y={10} stroke={C.amber}  strokeDasharray="4 3" strokeWidth={1} />
+            <ReferenceLine y={15} stroke={C.crimson} strokeDasharray="4 3" strokeWidth={1} />
+            <Line type="monotone" dataKey="avg"  stroke={C.mutedL} strokeWidth={1} dot={false} strokeDasharray="6 3" activeDot={false} />
+            <Line type="monotone" dataKey="rate" stroke={selectedContract ? C.crimson : C.navy} strokeWidth={2.5} dot={false} activeDot={{ r: 4, fill: selectedContract ? C.crimson : C.navy, stroke: C.white, strokeWidth: 2 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <div style={{ display: "flex", gap: 14, padding: "8px 16px 12px", borderTop: `1px solid ${C.borderL}`, flexShrink: 0, flexWrap: "wrap" }}>
+        {[
+          { color: selectedContract ? C.crimson : C.navy, label: selectedContract ? "CONTRACT RATE" : "FAILURE RATE", dash: false },
+          { color: C.mutedL,  label: "ROLLING AVG",  dash: true  },
+          { color: C.amber,   label: "10% WARNING",  zone: true, zoneBg: C.amberZ  },
+          { color: C.crimson, label: "15% CRITICAL", zone: true, zoneBg: C.crimsonZ },
+        ].map(t => (
+          <div key={t.label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            {t.zone
+              ? <div style={{ width: 14, height: 7, background: t.zoneBg, border: `1px dashed ${t.color}` }} />
+              : <div style={{ width: 14, borderTop: `${t.dash ? "1px dashed" : "2px solid"} ${t.color}` }} />
+            }
+            <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 1.5, color: t.color }}>{t.label}</span>
+          </div>
+        ))}
+      </div>
+    </HudPanel>
+  );
+}
+
+// ── Contracts panel — with click filter + classification ──────
+function ContractsPanel({ blocks, isMobile, selectedContract, onSelectContract }) {
+  const contractHistory = buildContractHistory(blocks);
+  const sorted = Object.entries(contractHistory)
+    .sort((a, b) => b[1].total - a[1].total)
+    .slice(0, 8);
+  const max = sorted[0]?.[1]?.total || 1;
+
+  return (
+    <HudPanel label="CONTRACT INTELLIGENCE" style={{ display: "flex", flexDirection: "column", height: isMobile ? "auto" : "100%", overflow: "hidden", minHeight: 0 }}>
+      <div style={{ padding: "12px 18px 10px", borderBottom: `1px solid ${C.borderL}`, display: "flex", justifyContent: "space-between", flexShrink: 0 }}>
+        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL }}>FAILURE ACCUMULATION</span>
+        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL }}>{sorted.length} tracked</span>
+      </div>
+      <div style={{ flex: isMobile ? "none" : 1, overflowY: isMobile ? "visible" : "auto", minHeight: 0 }}>
+        {sorted.length === 0
+          ? <div style={{ padding: "24px 18px", fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: C.mutedL }}>No failures yet.</div>
+          : sorted.map(([addr, data], i) => {
+              const count       = data.total;
+              const intensity   = count / max;
+              const blockSpread = data.blocks.length;
+              const classification = classifyContract(
+                addr, count, blockSpread, blocks.length, data.firstIdx, data.lastIdx
+              );
+              const isSelected  = selectedContract === addr;
+              const barColor    = intensity > 0.7 ? C.crimson : intensity > 0.4 ? C.amber : C.navy;
+              const rowBg       = isSelected
+                ? `${classification.color}14`
+                : intensity > 0.7 ? C.crimsonG : intensity > 0.4 ? C.amberG : "transparent";
+              const canClick    = isRealAddr(addr);
+
+              return (
+                <div
+                  key={addr}
+                  onClick={() => onSelectContract(isSelected ? null : addr)}
+                  style={{
+                    padding: "10px 18px",
+                    borderBottom: `1px solid ${C.borderL}44`,
+                    background: rowBg,
+                    cursor: "pointer",
+                    borderLeft: isSelected ? `3px solid ${classification.color}` : "3px solid transparent",
+                    transition: "all 0.2s",
+                  }}
+                  onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = C.navyG; }}
+                  onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = rowBg; }}
+                >
+                  {/* Top row: rank + address + count */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, color: C.white, background: barColor, padding: "1px 6px", fontWeight: 700 }}>{i + 1}</span>
+                      {canClick
+                        ? <a
+                            href={explorerUrl(addr)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={addr}
+                            onClick={e => e.stopPropagation()}
+                            style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: isSelected ? classification.color : intensity > 0.7 ? C.crimson : C.navy, textDecoration: "none", borderBottom: `1px dashed ${isSelected ? classification.color : intensity > 0.7 ? C.crimson : C.borderL}`, cursor: "pointer" }}
+                          >{shortAddr(addr)}</a>
+                        : <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: C.muted }}>{addr}</span>
+                      }
+                    </div>
+                    <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: intensity > 0.7 ? 20 : intensity > 0.4 ? 17 : 14, color: barColor }}>{count}</span>
+                  </div>
+
+                  {/* Classification badge */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                    <span style={{ fontSize: 10 }}>{classification.icon}</span>
+                    <span style={{
+                      fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 2,
+                      color: classification.color, fontWeight: 600,
+                    }}>{classification.label}</span>
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: C.mutedL, marginLeft: "auto" }}>
+                      {blockSpread} block{blockSpread !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+
+                  {/* Proportional bar */}
+                  <div style={{ height: intensity > 0.7 ? 3 : 2, background: C.bgDeep }}>
+                    <div style={{ height: "100%", width: `${intensity * 100}%`, background: isSelected ? classification.color : barColor, transition: "width 0.6s ease" }} />
+                  </div>
+
+                  {/* Filter hint */}
+                  {!isSelected && (
+                    <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, color: C.mutedL, letterSpacing: 1, marginTop: 4, opacity: 0.6 }}>
+                      TAP TO FILTER
+                    </div>
+                  )}
+                  {isSelected && (
+                    <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, color: classification.color, letterSpacing: 1, marginTop: 4, fontWeight: 600 }}>
+                      ✓ ACTIVE FILTER
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+      </div>
+    </HudPanel>
+  );
+}
+
+// ── Mobile signal bar ─────────────────────────────────────────
+function MobileSignalBar({ trend, insight }) {
+  const trendColor = trend.includes("RISING") ? C.crimson : trend.includes("DROP") ? C.navyL : C.muted;
+  return (
+    <div style={{ background: C.panel, borderBottom: `1px solid ${C.border}`, padding: "10px 16px", flexShrink: 0 }}>
+      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 2, color: C.mutedL, marginBottom: 4 }}>TREND · INSIGHT</div>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
+        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: trendColor, fontWeight: 700, whiteSpace: "nowrap" }}>{trend}</span>
+        <span style={{ color: C.borderL }}>·</span>
+        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: C.muted, lineHeight: 1.5 }}>{insight}</span>
+      </div>
+    </div>
+  );
+}
+
 // ── Top bar ───────────────────────────────────────────────────
 function TopBar({ trend, severity, insight, latestBlock, isMobile }) {
   const sevColor   = severity === "HIGH" ? C.crimson : severity === "MEDIUM" ? C.amber : C.navy;
@@ -195,204 +573,6 @@ function TopBar({ trend, severity, insight, latestBlock, isMobile }) {
   );
 }
 
-// ── Stats row ─────────────────────────────────────────────────
-function StatsRow({ blocks, isMobile, meta }) {
-  const total    = blocks.reduce((s, b) => s + b.totalTx, 0);
-  const failed   = blocks.reduce((s, b) => s + b.failedTx, 0);
-  const avgRate  = blocks.length ? (blocks.reduce((s, b) => s + b.failureRate, 0) / blocks.length * 100).toFixed(2) : "0.00";
-  const avgFloat = parseFloat(avgRate);
-  const blocksScanned   = meta.totalBlocksScanned || blocks.length;
-  const alertsTriggered = meta.totalAlertsTriggered || 0;
-
-  const stats = [
-    { label: "BLOCKS SCANNED",     value: blocksScanned.toLocaleString(),    sub: "processed",   size: 24, accent: C.navy,    color: C.charcoal, spanFull: false },
-    { label: "TOTAL TRANSACTIONS", value: total.toLocaleString(),             sub: "on-chain",    size: 24, accent: C.navy,    color: C.charcoal, spanFull: false },
-    { label: "TOTAL FAILURES",     value: failed.toLocaleString(),            sub: "detected",    size: failed > 0 ? 30 : 24,
-      accent: failed > 0 ? C.crimson : C.navy, color: failed > 0 ? C.crimson : C.charcoal, bg: failed > 0 ? C.crimsonG : "transparent", spanFull: false },
-    { label: "AVG FAILURE RATE",   value: `${avgRate}%`,                      sub: "rolling avg", size: avgFloat >= 10 ? 30 : avgFloat >= 5 ? 28 : 24,
-      accent: avgFloat >= 10 ? C.crimson : avgFloat >= 5 ? C.amber : C.navy,
-      color:  avgFloat >= 10 ? C.crimson : avgFloat >= 5 ? C.amber : C.charcoal,
-      bg:     avgFloat >= 10 ? C.crimsonG : avgFloat >= 5 ? C.amberG : "transparent", spanFull: false },
-    { label: "ALERTS TRIGGERED",   value: alertsTriggered.toLocaleString(),   sub: "≥10% spikes", size: alertsTriggered > 0 ? 30 : 24,
-      accent: alertsTriggered > 0 ? C.crimson : C.navy, color: alertsTriggered > 0 ? C.crimson : C.charcoal,
-      bg: alertsTriggered > 0 ? C.crimsonG : "transparent",
-      spanFull: true, // 5th card — span full width on mobile
-    },
-  ];
-
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(5,1fr)", gap: isMobile ? 8 : 10, flexShrink: 0 }}>
-      {stats.map((s, i) => (
-        <HudPanel key={i} accent={s.accent} style={{
-          padding: isMobile ? "12px 14px" : "14px 18px",
-          background: s.bg || C.panel,
-          // 5th card spans both columns on mobile
-          gridColumn: isMobile && s.spanFull ? "1 / -1" : "auto",
-        }}>
-          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 2, color: s.color === C.charcoal ? C.mutedL : s.color, marginBottom: 6, opacity: 0.8 }}>{s.label}</div>
-          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: isMobile ? s.size - 4 : s.size, color: s.color, lineHeight: 1 }}>{s.value}</div>
-          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: C.mutedL, marginTop: 4 }}>{s.sub}</div>
-        </HudPanel>
-      ))}
-    </div>
-  );
-}
-
-// ── Block feed ────────────────────────────────────────────────
-function BlockFeed({ blocks, isMobile }) {
-  const ref = useRef(null);
-  useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight; }, [blocks]);
-
-  return (
-    <HudPanel label="BLOCK FEED" style={{ display: "flex", flexDirection: "column", overflow: "hidden", height: isMobile ? 300 : "100%", minHeight: 0 }}>
-      <div style={{ padding: "12px 16px 10px", borderBottom: `1px solid ${C.borderL}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
-        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL }}>LIVE STREAM</span>
-        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL }}>{blocks.length}</span>
-      </div>
-      <div ref={ref} style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>
-        {blocks.slice(-60).map((b, i, arr) => {
-          const isNew  = i >= arr.length - 3;
-          const isCrit = b.failureRate >= 0.15;
-          const isWarn = b.failureRate >= 0.10;
-          const rowBg  = isCrit ? C.crimsonG : isWarn ? C.amberG : isNew ? C.navyG : "transparent";
-          const topEntry = Object.entries(b.topFailing || {}).sort((a, z) => z[1] - a[1])[0];
-          const topAddr  = topEntry?.[0] || null;
-          return (
-            <div key={b.blockNumber} style={{ padding: "7px 16px", borderLeft: `2px solid ${isCrit ? C.crimson : isWarn ? C.amber : isNew ? C.navy : C.borderL}`, background: rowBg, transition: "background 0.8s", animation: i === arr.length - 1 ? "fadeIn 0.4s ease" : "none" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: isCrit ? C.crimson : isNew ? C.navy : C.muted }}>#{b.blockNumber.toLocaleString()}</span>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL }}>{b.totalTx}tx</span>
-                  <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: isCrit || isWarn ? 12 : 11, letterSpacing: 1, color: isCrit ? C.crimson : isWarn ? C.amber : C.navy }}>
-                    {b.failedTx > 0 ? `${b.failedTx} FAIL` : "OK"}
-                  </span>
-                </div>
-              </div>
-              {topAddr && (
-                <div style={{ marginTop: 2 }}>
-                  {isRealAddr(topAddr)
-                    ? <a href={explorerUrl(topAddr)} target="_blank" rel="noopener noreferrer" title={topAddr} style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: isCrit ? C.crimson : C.amber, textDecoration: "none", borderBottom: `1px dashed ${isCrit ? C.crimson : C.amber}44` }}>{shortAddr(topAddr)}</a>
-                    : <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL }}>unknown</span>
-                  }
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </HudPanel>
-  );
-}
-
-// ── Chart ─────────────────────────────────────────────────────
-function FailureChart({ chartData, isMobile }) {
-  const spikeRanges = [];
-  let inSpike = false, spikeStart = null;
-  chartData.forEach((d, i) => {
-    if (d.rate >= 10 && !inSpike) { inSpike = true; spikeStart = d.block; }
-    else if (d.rate < 10 && inSpike) { inSpike = false; spikeRanges.push({ x1: spikeStart, x2: chartData[i - 1]?.block }); }
-  });
-  if (inSpike && spikeStart) spikeRanges.push({ x1: spikeStart, x2: chartData[chartData.length - 1]?.block });
-
-  return (
-    <HudPanel label="FAILURE RATE · LAST 30 BLOCKS" style={{ display: "flex", flexDirection: "column", height: isMobile ? "auto" : "100%", overflow: "hidden", minHeight: 0 }}>
-      <div style={{ height: isMobile ? 200 : "100%", padding: "16px 8px 0 0", minHeight: 0, flexShrink: isMobile ? 0 : 1, flex: isMobile ? "none" : 1 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 6, right: 16, bottom: 0, left: 0 }}>
-            <XAxis dataKey="block" tick={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, fill: C.mutedL }} axisLine={{ stroke: C.borderL }} tickLine={false} tickFormatter={v => String(v).slice(-4)} interval="preserveStartEnd" />
-            <YAxis tick={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, fill: C.mutedL }} axisLine={false} tickLine={false} tickFormatter={v => `${v}%`} domain={[0, "auto"]} width={30} />
-            <Tooltip content={<ChartTooltip />} cursor={{ stroke: C.border, strokeWidth: 1, strokeDasharray: "4 2" }} />
-            <ReferenceArea y1={10} y2={15}  fill={C.amberZ}   fillOpacity={1} />
-            <ReferenceArea y1={15} y2={100} fill={C.crimsonZ} fillOpacity={1} />
-            {spikeRanges.map((r, i) => <ReferenceArea key={i} x1={r.x1} x2={r.x2} fill={C.crimsonG} fillOpacity={1} />)}
-            <ReferenceLine y={10} stroke={C.amber}  strokeDasharray="4 3" strokeWidth={1} />
-            <ReferenceLine y={15} stroke={C.crimson} strokeDasharray="4 3" strokeWidth={1} />
-            <Line type="monotone" dataKey="avg"  stroke={C.mutedL} strokeWidth={1} dot={false} strokeDasharray="6 3" activeDot={false} />
-            <Line type="monotone" dataKey="rate" stroke={C.navy}   strokeWidth={2.5} dot={false} activeDot={{ r: 4, fill: C.navy, stroke: C.white, strokeWidth: 2 }} />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-      <div style={{ display: "flex", gap: 14, padding: "8px 16px 12px", borderTop: `1px solid ${C.borderL}`, flexShrink: 0, flexWrap: "wrap" }}>
-        {[
-          { color: C.navy,    label: "FAILURE RATE", dash: false },
-          { color: C.mutedL,  label: "ROLLING AVG",  dash: true  },
-          { color: C.amber,   label: "10% WARNING",  zone: true, zoneBg: C.amberZ  },
-          { color: C.crimson, label: "15% CRITICAL", zone: true, zoneBg: C.crimsonZ },
-        ].map(t => (
-          <div key={t.label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            {t.zone
-              ? <div style={{ width: 14, height: 7, background: t.zoneBg, border: `1px dashed ${t.color}` }} />
-              : <div style={{ width: 14, borderTop: `${t.dash ? "1px dashed" : "2px solid"} ${t.color}` }} />
-            }
-            <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 1.5, color: t.color }}>{t.label}</span>
-          </div>
-        ))}
-      </div>
-    </HudPanel>
-  );
-}
-
-// ── Contracts panel ───────────────────────────────────────────
-function ContractsPanel({ blocks, isMobile }) {
-  const history = {};
-  for (const b of blocks)
-    for (const [addr, count] of Object.entries(b.topFailing || {}))
-      history[addr] = (history[addr] || 0) + count;
-  const sorted = Object.entries(history).sort((a, b) => b[1] - a[1]).slice(0, 8);
-  const max    = sorted[0]?.[1] || 1;
-
-  return (
-    <HudPanel label="CONTRACT INTELLIGENCE" style={{ display: "flex", flexDirection: "column", height: isMobile ? "auto" : "100%", overflow: "hidden", minHeight: 0 }}>
-      <div style={{ padding: "12px 18px 10px", borderBottom: `1px solid ${C.borderL}`, display: "flex", justifyContent: "space-between", flexShrink: 0 }}>
-        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL }}>FAILURE ACCUMULATION</span>
-        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL }}>{sorted.length} tracked</span>
-      </div>
-      <div style={{ flex: isMobile ? "none" : 1, overflowY: isMobile ? "visible" : "auto", minHeight: 0 }}>
-        {sorted.length === 0
-          ? <div style={{ padding: "24px 18px", fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: C.mutedL }}>No failures yet.</div>
-          : sorted.map(([addr, count], i) => {
-              const intensity = count / max;
-              const barColor  = intensity > 0.7 ? C.crimson : intensity > 0.4 ? C.amber : C.navy;
-              const rowBg     = intensity > 0.7 ? C.crimsonG : intensity > 0.4 ? C.amberG : "transparent";
-              const canClick  = isRealAddr(addr);
-              return (
-                <div key={addr} style={{ padding: "10px 18px", borderBottom: `1px solid ${C.borderL}44`, background: rowBg }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, color: C.white, background: barColor, padding: "1px 6px", fontWeight: 700 }}>{i + 1}</span>
-                      {canClick
-                        ? <a href={explorerUrl(addr)} target="_blank" rel="noopener noreferrer" title={addr} style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: intensity > 0.7 ? C.crimson : C.navy, textDecoration: "none", borderBottom: `1px dashed ${intensity > 0.7 ? C.crimson : C.borderL}`, cursor: "pointer" }}>{shortAddr(addr)}</a>
-                        : <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: C.muted }}>{addr}</span>
-                      }
-                    </div>
-                    <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: intensity > 0.7 ? 20 : intensity > 0.4 ? 17 : 14, color: barColor }}>{count}</span>
-                  </div>
-                  <div style={{ height: intensity > 0.7 ? 3 : 2, background: C.bgDeep }}>
-                    <div style={{ height: "100%", width: `${intensity * 100}%`, background: barColor, transition: "width 0.6s ease" }} />
-                  </div>
-                </div>
-              );
-            })}
-      </div>
-    </HudPanel>
-  );
-}
-
-// ── Mobile signal bar ─────────────────────────────────────────
-function MobileSignalBar({ trend, insight }) {
-  const trendColor = trend.includes("RISING") ? C.crimson : trend.includes("DROP") ? C.navyL : C.muted;
-  return (
-    <div style={{ background: C.panel, borderBottom: `1px solid ${C.border}`, padding: "10px 16px", flexShrink: 0 }}>
-      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 2, color: C.mutedL, marginBottom: 4 }}>TREND · INSIGHT</div>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
-        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: trendColor, fontWeight: 700, whiteSpace: "nowrap" }}>{trend}</span>
-        <span style={{ color: C.borderL }}>·</span>
-        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: C.muted, lineHeight: 1.5 }}>{insight}</span>
-      </div>
-    </div>
-  );
-}
-
 // ── Alert toast ───────────────────────────────────────────────
 function AlertToast({ alert, onDismiss, isMobile }) {
   const isCrit = alert.failureRate >= 0.15;
@@ -436,25 +616,27 @@ function Footer({ isMobile }) {
   return (
     <div style={{
       borderTop: `1px solid ${C.border}`,
-      padding: isMobile ? "14px 16px" : "11px 32px",
+      padding: isMobile ? "18px 20px" : "14px 32px",
       display: "flex",
       flexDirection: isMobile ? "column" : "row",
       justifyContent: isMobile ? "center" : "space-between",
       alignItems: "center",
-      gap: isMobile ? 6 : 0,
+      gap: isMobile ? 10 : 0,
       background: C.panel, flexShrink: 0,
       textAlign: isMobile ? "center" : "left",
     }}>
-      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 11, letterSpacing: 1, color: C.muted }}>
+      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 13, letterSpacing: 1, color: C.muted }}>
         Powered by{" "}
-        <a href="https://x.com/arc" target="_blank" rel="noopener noreferrer" style={{ color: C.navy, fontWeight: 700, textDecoration: "none" }}>Arc</a>
+        <a href="https://x.com/arc" target="_blank" rel="noopener noreferrer"
+          style={{ color: C.navy, fontWeight: 700, textDecoration: "none", fontSize: 14 }}>Arc</a>
       </span>
-      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 11, letterSpacing: 1, color: C.muted }}>
+      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 13, letterSpacing: 1, color: C.muted }}>
         Built by{" "}
-        <a href="https://x.com/olumi441" target="_blank" rel="noopener noreferrer" style={{ color: C.navy, fontWeight: 700, textDecoration: "none" }}>Abu Olumi</a>
+        <a href="https://x.com/olumi441" target="_blank" rel="noopener noreferrer"
+          style={{ color: C.navy, fontWeight: 700, textDecoration: "none", fontSize: 14 }}>Abu Olumi</a>
       </span>
       {!isMobile && (
-        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9, letterSpacing: 2, color: C.mutedL }}>
+        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 11, letterSpacing: 2, color: C.mutedL }}>
           Real-time signal intelligence for Arc Testnet
         </span>
       )}
@@ -464,11 +646,12 @@ function Footer({ isMobile }) {
 
 // ── Main ──────────────────────────────────────────────────────
 export default function ArcSenseDashboard() {
-  const [blocks, setBlocks] = useState([]);
-  const [alert, setAlert]   = useState(null);
-  const [meta, setMeta]     = useState({ totalBlocksScanned: 0, totalAlertsTriggered: 0 });
-  const alertedBlocks       = useRef(new Set());
-  const isMobile            = useIsMobile();
+  const [blocks, setBlocks]               = useState([]);
+  const [alert, setAlert]                 = useState(null);
+  const [meta, setMeta]                   = useState({ totalBlocksScanned: 0, totalAlertsTriggered: 0 });
+  const [selectedContract, setSelected]   = useState(null);
+  const alertedBlocks                     = useRef(new Set());
+  const isMobile                          = useIsMobile();
 
   useEffect(() => {
     const fetchReports = async () => {
@@ -510,12 +693,25 @@ export default function ArcSenseDashboard() {
     : "Network operating within normal parameters."
     : "Awaiting data...";
 
+  // Chart data — scoped to selected contract if active
   const raw = blocks.slice(-30);
   const chartData = raw.map((b, i, arr) => {
     const window = arr.slice(Math.max(0, i - 4), i + 1);
-    const avg    = window.reduce((s, x) => s + x.failureRate, 0) / window.length;
+    if (selectedContract) {
+      const contractRate = b.totalTx > 0 ? (b.topFailing?.[selectedContract] || 0) / b.totalTx : 0;
+      const avgRate = window.reduce((s, x) => s + (x.totalTx > 0 ? (x.topFailing?.[selectedContract] || 0) / x.totalTx : 0), 0) / window.length;
+      return { block: b.blockNumber, rate: parseFloat((contractRate * 100).toFixed(2)), avg: parseFloat((avgRate * 100).toFixed(2)) };
+    }
+    const avg = window.reduce((s, x) => s + x.failureRate, 0) / window.length;
     return { block: b.blockNumber, rate: parseFloat((b.failureRate * 100).toFixed(2)), avg: parseFloat((avg * 100).toFixed(2)) };
   });
+
+  // Classification for filter badge
+  const contractHistory = buildContractHistory(blocks);
+  const selectedData    = selectedContract ? contractHistory[selectedContract] : null;
+  const selectedClass   = selectedData
+    ? classifyContract(selectedContract, selectedData.total, selectedData.blocks.length, blocks.length, selectedData.firstIdx, selectedData.lastIdx)
+    : null;
 
   return (
     <>
@@ -534,29 +730,40 @@ export default function ArcSenseDashboard() {
       `}</style>
 
       {isMobile ? (
-        // ── MOBILE: stacked, scrollable ──────────────────────
         <div style={{ background: C.bg, minHeight: "100dvh", display: "flex", flexDirection: "column" }}>
           <TopBar trend={trend} severity={severity} insight={insight} latestBlock={latest?.blockNumber} isMobile={true} />
           <MobileSignalBar trend={trend} insight={insight} />
           <div style={{ flex: 1, padding: "12px", display: "flex", flexDirection: "column", gap: 12 }}>
-            <StatsRow blocks={blocks} isMobile={true} meta={meta} />
-            <BlockFeed blocks={blocks} isMobile={true} />
-            <FailureChart chartData={chartData} isMobile={true} />
-            <ContractsPanel blocks={blocks} isMobile={true} />
+            {/* Filter badge on mobile */}
+            {selectedContract && selectedClass && (
+              <FilterBadge addr={selectedContract} classification={selectedClass} onClear={() => setSelected(null)} />
+            )}
+            {selectedContract
+              ? <ScopedStatsRow blocks={blocks} selectedContract={selectedContract} isMobile={true} />
+              : <StatsRow blocks={blocks} isMobile={true} meta={meta} />
+            }
+            <BlockFeed blocks={blocks} isMobile={true} selectedContract={selectedContract} />
+            <FailureChart chartData={chartData} isMobile={true} selectedContract={selectedContract} />
+            <ContractsPanel blocks={blocks} isMobile={true} selectedContract={selectedContract} onSelectContract={setSelected} />
           </div>
           <Footer isMobile={true} />
         </div>
       ) : (
-        // ── DESKTOP: fixed viewport, wider feed, smaller chart
         <div style={{ background: C.bg, height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <TopBar trend={trend} severity={severity} insight={insight} latestBlock={latest?.blockNumber} isMobile={false} />
-          <div style={{ flex: 1, padding: "14px 24px", display: "flex", flexDirection: "column", gap: 12, overflow: "hidden", minHeight: 0 }}>
-            <StatsRow blocks={blocks} isMobile={false} meta={meta} />
-            {/* Feed wider (320px), chart slightly smaller, contracts same */}
+          <div style={{ flex: 1, padding: "14px 24px", display: "flex", flexDirection: "column", gap: 10, overflow: "hidden", minHeight: 0 }}>
+            {/* Filter badge on desktop */}
+            {selectedContract && selectedClass && (
+              <FilterBadge addr={selectedContract} classification={selectedClass} onClear={() => setSelected(null)} />
+            )}
+            {selectedContract
+              ? <ScopedStatsRow blocks={blocks} selectedContract={selectedContract} isMobile={false} />
+              : <StatsRow blocks={blocks} isMobile={false} meta={meta} />
+            }
             <div style={{ display: "grid", gridTemplateColumns: "320px 1fr 280px", gap: 12, flex: 1, minHeight: 0, overflow: "hidden" }}>
-              <BlockFeed blocks={blocks} isMobile={false} />
-              <FailureChart chartData={chartData} isMobile={false} />
-              <ContractsPanel blocks={blocks} isMobile={false} />
+              <BlockFeed blocks={blocks} isMobile={false} selectedContract={selectedContract} />
+              <FailureChart chartData={chartData} isMobile={false} selectedContract={selectedContract} />
+              <ContractsPanel blocks={blocks} isMobile={false} selectedContract={selectedContract} onSelectContract={setSelected} />
             </div>
           </div>
           <Footer isMobile={false} />
