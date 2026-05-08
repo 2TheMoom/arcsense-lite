@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, ReferenceLine
+  ResponsiveContainer, ReferenceLine, ReferenceArea
 } from "recharts";
 
 // ── Brand tokens ──────────────────────────────────────────────
@@ -20,10 +20,23 @@ const C = {
   navyG:   "rgba(31,58,143,0.07)",
   crimson: "#B01C2E",
   crimsonG:"rgba(176,28,46,0.07)",
+  crimsonZ:"rgba(176,28,46,0.04)",
   amber:   "#8A6010",
   amberG:  "rgba(138,96,16,0.07)",
+  amberZ:  "rgba(138,96,16,0.04)",
   white:   "#FAFAF8",
 };
+
+// ── Responsive hook ───────────────────────────────────────────
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return isMobile;
+}
 
 // ── Helpers ───────────────────────────────────────────────────
 function shortAddr(addr) {
@@ -97,36 +110,93 @@ function getTrend(history) {
   return "STABLE ACTIVITY";
 }
 
-// ── Chart tooltip — defined OUTSIDE component to fix ESLint ──
+// ── Enhanced chart tooltip ────────────────────────────────────
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   const rate = payload.find(p => p.dataKey === "rate");
   const avg  = payload.find(p => p.dataKey === "avg");
+  if (!rate) return null;
+
+  const val      = rate.value;
+  const isCrit   = val >= 15;
+  const isWarn   = val >= 10;
+  const valColor = isCrit ? C.crimson : isWarn ? C.amber : C.navy;
+  const status   = isCrit ? "CRITICAL" : isWarn ? "WARNING" : "NORMAL";
+  const statusBg = isCrit ? C.crimsonG : isWarn ? C.amberG : C.navyG;
+
   return (
-    <div style={{ background: C.white, border: `1px solid ${C.border}`, padding: "10px 14px", borderRadius: 1 }}>
+    <div style={{
+      background: C.white,
+      border: `1px solid ${isCrit ? C.crimson : isWarn ? C.amber : C.border}`,
+      borderLeft: `3px solid ${valColor}`,
+      padding: "10px 14px", borderRadius: 1,
+      boxShadow: `0 4px 20px ${valColor}22`,
+      minWidth: 160,
+    }}>
       <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 2, color: C.mutedL, marginBottom: 6 }}>
-        BLOCK #{label}
+        BLOCK #{String(label).padStart(8, "0")}
       </div>
-      {rate && (
-        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 16, color: rate.value >= 15 ? C.crimson : rate.value >= 10 ? C.amber : C.navy }}>
-          {rate.value.toFixed(1)}% FAILURE
-        </div>
-      )}
+      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: 22, color: valColor, lineHeight: 1 }}>
+        {val.toFixed(1)}%
+      </div>
+      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.muted, marginTop: 2 }}>
+        failure rate
+      </div>
       {avg && (
-        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: C.muted, marginTop: 4 }}>
-          avg {avg.value.toFixed(1)}%
+        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL, marginTop: 6, paddingTop: 6, borderTop: `1px solid ${C.borderL}` }}>
+          rolling avg · {avg.value.toFixed(1)}%
         </div>
       )}
+      <div style={{
+        marginTop: 8, display: "inline-block",
+        fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 2,
+        color: valColor, background: statusBg,
+        padding: "2px 6px", fontWeight: 700,
+      }}>
+        {status}
+      </div>
     </div>
   );
 }
 
-// ── Top bar ───────────────────────────────────────────────────
-function TopBar({ trend, severity, insight, latestBlock }) {
+// ── Top bar — responsive ──────────────────────────────────────
+function TopBar({ trend, severity, insight, latestBlock, isMobile }) {
   const sevColor   = severity === "HIGH" ? C.crimson : severity === "MEDIUM" ? C.amber : C.navy;
   const sevBg      = severity === "HIGH" ? C.crimsonG : severity === "MEDIUM" ? C.amberG : C.navyG;
   const trendColor = trend.includes("RISING") ? C.crimson : trend.includes("DROP") ? C.navyL : C.muted;
 
+  if (isMobile) {
+    return (
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "0 16px", height: 54, borderBottom: `1px solid ${C.border}`,
+        background: C.panel, flexShrink: 0,
+      }}>
+        {/* Logo */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <ArcSenseLogo size={28} />
+          <div>
+            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: 16, letterSpacing: 4, color: C.charcoal, lineHeight: 1 }}>ARCSENSE</div>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 6, letterSpacing: 1, color: C.mutedL }}>ARC TESTNET</div>
+          </div>
+        </div>
+
+        {/* Severity + Live */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ background: sevBg, border: `1px solid ${sevColor}44`, padding: "4px 10px", textAlign: "center" }}>
+            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 2, color: C.mutedL }}>SEVERITY</div>
+            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 13, color: sevColor, letterSpacing: 3 }}>{severity}</div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 5, border: `1px solid ${C.navy}44`, padding: "4px 8px", background: C.navyG }}>
+            <div style={{ width: 5, height: 5, borderRadius: "50%", background: C.navy, animation: "blink 1.8s ease-in-out infinite" }} />
+            <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9, letterSpacing: 2, color: C.navy, fontWeight: 600 }}>LIVE</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Desktop topbar
   return (
     <div style={{
       display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -157,8 +227,7 @@ function TopBar({ trend, severity, insight, latestBlock }) {
               fontFamily: s.bold ? "'Barlow Condensed', sans-serif" : "'JetBrains Mono', monospace",
               fontSize: s.small ? 9 : s.bold ? 16 : 10,
               fontWeight: s.bold ? 700 : 400,
-              color: s.color,
-              letterSpacing: s.bold ? 4 : 0,
+              color: s.color, letterSpacing: s.bold ? 4 : 0,
               maxWidth: s.small ? 240 : "auto",
             }}>{s.value}</div>
           </div>
@@ -178,8 +247,8 @@ function TopBar({ trend, severity, insight, latestBlock }) {
   );
 }
 
-// ── Stats row ─────────────────────────────────────────────────
-function StatsRow({ blocks }) {
+// ── Stats row — responsive ────────────────────────────────────
+function StatsRow({ blocks, isMobile }) {
   const total    = blocks.reduce((s, b) => s + b.totalTx, 0);
   const failed   = blocks.reduce((s, b) => s + b.failedTx, 0);
   const avgRate  = blocks.length
@@ -191,22 +260,19 @@ function StatsRow({ blocks }) {
   const stats = [
     { label: "BLOCKS SCANNED",     value: blocks.length,          sub: "processed",   size: 24, accent: C.navy,    color: C.charcoal },
     { label: "TOTAL TRANSACTIONS", value: total.toLocaleString(),  sub: "on-chain",    size: 24, accent: C.navy,    color: C.charcoal },
-    {
-      label: "TOTAL FAILURES", value: failed.toLocaleString(), sub: "detected",
+    { label: "TOTAL FAILURES",     value: failed.toLocaleString(), sub: "detected",
       size: failed > 0 ? 30 : 24,
       accent: failed > 0 ? C.crimson : C.navy,
       color:  failed > 0 ? C.crimson : C.charcoal,
       bg:     failed > 0 ? C.crimsonG : "transparent",
     },
-    {
-      label: "AVG FAILURE RATE", value: `${avgRate}%`, sub: "rolling avg",
+    { label: "AVG FAILURE RATE",   value: `${avgRate}%`,          sub: "rolling avg",
       size:   avgFloat >= 10 ? 30 : avgFloat >= 5 ? 28 : 24,
       accent: avgFloat >= 10 ? C.crimson : avgFloat >= 5 ? C.amber : C.navy,
       color:  avgFloat >= 10 ? C.crimson : avgFloat >= 5 ? C.amber : C.charcoal,
       bg:     avgFloat >= 10 ? C.crimsonG : avgFloat >= 5 ? C.amberG : "transparent",
     },
-    {
-      label: "ALERTS TRIGGERED", value: alerts.toString(), sub: "≥10% spikes",
+    { label: "ALERTS TRIGGERED",   value: alerts.toString(),      sub: "≥10% spikes",
       size:   alerts > 0 ? 30 : 24,
       accent: alerts > 0 ? C.crimson : C.navy,
       color:  alerts > 0 ? C.crimson : C.charcoal,
@@ -215,41 +281,45 @@ function StatsRow({ blocks }) {
   ];
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10, flexShrink: 0 }}>
+    <div style={{
+      display: "grid",
+      gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(5, 1fr)",
+      gap: isMobile ? 8 : 10,
+      flexShrink: 0,
+    }}>
       {stats.map((s, i) => (
-        <HudPanel key={i} accent={s.accent} style={{ padding: "14px 18px", background: s.bg || C.panel }}>
-          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: s.color === C.charcoal ? C.mutedL : s.color, marginBottom: 8, opacity: 0.8 }}>{s.label}</div>
-          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: s.size, color: s.color, lineHeight: 1 }}>{s.value}</div>
-          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL, marginTop: 5 }}>{s.sub}</div>
+        <HudPanel key={i} accent={s.accent} style={{ padding: isMobile ? "12px 14px" : "14px 18px", background: s.bg || C.panel }}>
+          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 2, color: s.color === C.charcoal ? C.mutedL : s.color, marginBottom: 6, opacity: 0.8 }}>{s.label}</div>
+          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: isMobile ? s.size - 4 : s.size, color: s.color, lineHeight: 1 }}>{s.value}</div>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: C.mutedL, marginTop: 4 }}>{s.sub}</div>
         </HudPanel>
       ))}
     </div>
   );
 }
 
-// ── Block feed — fixed height, internal scroll, clickable addrs
-function BlockFeed({ blocks }) {
+// ── Block feed ────────────────────────────────────────────────
+function BlockFeed({ blocks, isMobile }) {
   const ref = useRef(null);
   useEffect(() => {
     if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
   }, [blocks]);
 
   return (
-    <HudPanel label="BLOCK FEED" style={{ display: "flex", flexDirection: "column", overflow: "hidden", height: "100%", minHeight: 0 }}>
+    <HudPanel label="BLOCK FEED" style={{
+      display: "flex", flexDirection: "column", overflow: "hidden",
+      height: isMobile ? 280 : "100%", minHeight: 0,
+    }}>
       <div style={{ padding: "12px 16px 10px", borderBottom: `1px solid ${C.borderL}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
         <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL }}>LIVE STREAM</span>
         <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL }}>{blocks.length}</span>
       </div>
-
-      {/* Scrollable area — strictly contained, never grows page */}
       <div ref={ref} style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>
         {blocks.slice(-60).map((b, i, arr) => {
           const isNew  = i >= arr.length - 3;
           const isCrit = b.failureRate >= 0.15;
           const isWarn = b.failureRate >= 0.10;
           const rowBg  = isCrit ? C.crimsonG : isWarn ? C.amberG : isNew ? C.navyG : "transparent";
-
-          // top failing contract for this block
           const topEntry = Object.entries(b.topFailing || {}).sort((a, z) => z[1] - a[1])[0];
           const topAddr  = topEntry?.[0] || null;
 
@@ -257,11 +327,9 @@ function BlockFeed({ blocks }) {
             <div key={b.blockNumber} style={{
               padding: "6px 16px",
               borderLeft: `2px solid ${isCrit ? C.crimson : isWarn ? C.amber : isNew ? C.navy : C.borderL}`,
-              background: rowBg,
-              transition: "background 0.8s",
+              background: rowBg, transition: "background 0.8s",
               animation: i === arr.length - 1 ? "fadeIn 0.4s ease" : "none",
             }}>
-              {/* Row top: block number + status */}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: isCrit ? C.crimson : isNew ? C.navy : C.muted }}>
                   #{b.blockNumber.toLocaleString()}
@@ -273,25 +341,11 @@ function BlockFeed({ blocks }) {
                   </span>
                 </div>
               </div>
-
-              {/* Row bottom: failing contract if any */}
               {topAddr && (
                 <div style={{ marginTop: 2 }}>
                   {isRealAddr(topAddr) ? (
-                    <a
-                      href={explorerUrl(topAddr)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title={topAddr}
-                      style={{
-                        fontFamily: "'JetBrains Mono', monospace", fontSize: 8,
-                        color: isCrit ? C.crimson : C.amber,
-                        textDecoration: "none",
-                        borderBottom: `1px dashed ${isCrit ? C.crimson : C.amber}44`,
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.borderBottomColor = isCrit ? C.crimson : C.amber}
-                      onMouseLeave={e => e.currentTarget.style.borderBottomColor = `${isCrit ? C.crimson : C.amber}44`}
-                    >
+                    <a href={explorerUrl(topAddr)} target="_blank" rel="noopener noreferrer" title={topAddr}
+                      style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: isCrit ? C.crimson : C.amber, textDecoration: "none", borderBottom: `1px dashed ${isCrit ? C.crimson : C.amber}44` }}>
                       {shortAddr(topAddr)}
                     </a>
                   ) : (
@@ -307,13 +361,48 @@ function BlockFeed({ blocks }) {
   );
 }
 
-// ── Chart ─────────────────────────────────────────────────────
-function FailureChart({ chartData }) {
+// ── Enhanced chart ────────────────────────────────────────────
+function FailureChart({ chartData, isMobile }) {
+  // Find spike ranges for highlight zones
+  const spikeRanges = [];
+  let inSpike = false;
+  let spikeStart = null;
+
+  chartData.forEach((d, i) => {
+    if (d.rate >= 10 && !inSpike) {
+      inSpike = true;
+      spikeStart = d.block;
+    } else if (d.rate < 10 && inSpike) {
+      inSpike = false;
+      spikeRanges.push({ x1: spikeStart, x2: chartData[i - 1]?.block });
+    }
+  });
+  if (inSpike && spikeStart) {
+    spikeRanges.push({ x1: spikeStart, x2: chartData[chartData.length - 1]?.block });
+  }
+
+  const chartHeight = isMobile ? 220 : "100%";
+
   return (
-    <HudPanel label="FAILURE RATE · LAST 30 BLOCKS" style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", minHeight: 0 }}>
-      <div style={{ flex: 1, padding: "20px 8px 0 0", minHeight: 0 }}>
+    <HudPanel label="FAILURE RATE · LAST 30 BLOCKS" style={{
+      display: "flex", flexDirection: "column",
+      height: isMobile ? "auto" : "100%",
+      overflow: "hidden", minHeight: 0,
+    }}>
+      <div style={{ height: chartHeight, padding: "20px 8px 0 0", minHeight: 0, flexShrink: isMobile ? 0 : 1, flex: isMobile ? "none" : 1 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 4, right: 20, bottom: 0, left: 0 }}>
+          <LineChart data={chartData} margin={{ top: 8, right: 20, bottom: 0, left: 0 }}>
+            <defs>
+              {/* Glow filter for spike line */}
+              <filter id="glow">
+                <feGaussianBlur stdDeviation="2" result="coloredBlur" />
+                <feMerge>
+                  <feMergeNode in="coloredBlur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
+
             <XAxis dataKey="block"
               tick={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, fill: C.mutedL }}
               axisLine={{ stroke: C.borderL }} tickLine={false}
@@ -324,25 +413,47 @@ function FailureChart({ chartData }) {
               axisLine={false} tickLine={false}
               tickFormatter={v => `${v}%`} domain={[0, "auto"]} width={32}
             />
-            <Tooltip content={<ChartTooltip />} />
-            <ReferenceLine y={10} stroke={C.amber}   strokeDasharray="4 3" strokeWidth={1} />
-            <ReferenceLine y={15} stroke={C.crimson}  strokeDasharray="4 3" strokeWidth={1} />
-            <Line type="monotone" dataKey="avg"  stroke={C.mutedL} strokeWidth={1} dot={false} strokeDasharray="6 3" activeDot={false} />
-            <Line type="monotone" dataKey="rate" stroke={C.navy}   strokeWidth={2} dot={false}
-              activeDot={{ r: 4, fill: C.navy, stroke: C.panel, strokeWidth: 2 }}
+            <Tooltip content={<ChartTooltip />} cursor={{ stroke: C.border, strokeWidth: 1, strokeDasharray: "4 2" }} />
+
+            {/* Severity background zones */}
+            <ReferenceArea y1={10} y2={15} fill={C.amberZ}  fillOpacity={1} />
+            <ReferenceArea y1={15} y2={100} fill={C.crimsonZ} fillOpacity={1} />
+
+            {/* Spike highlight ranges */}
+            {spikeRanges.map((r, i) => (
+              <ReferenceArea key={i} x1={r.x1} x2={r.x2} fill={C.crimsonG} fillOpacity={1} />
+            ))}
+
+            {/* Threshold lines */}
+            <ReferenceLine y={10} stroke={C.amber}  strokeDasharray="4 3" strokeWidth={1} />
+            <ReferenceLine y={15} stroke={C.crimson} strokeDasharray="4 3" strokeWidth={1} />
+
+            {/* Rolling average */}
+            <Line type="monotone" dataKey="avg" stroke={C.mutedL} strokeWidth={1} dot={false} strokeDasharray="6 3" activeDot={false} />
+
+            {/* Main failure rate line — colored by severity */}
+            <Line
+              type="monotone" dataKey="rate"
+              stroke={C.navy} strokeWidth={2.5} dot={false}
+              activeDot={{ r: 5, fill: C.navy, stroke: C.white, strokeWidth: 2 }}
             />
           </LineChart>
         </ResponsiveContainer>
       </div>
-      <div style={{ display: "flex", gap: 20, padding: "10px 20px 14px", borderTop: `1px solid ${C.borderL}`, flexShrink: 0, flexWrap: "wrap" }}>
+
+      {/* Legend */}
+      <div style={{ display: "flex", gap: 16, padding: "10px 16px 14px", borderTop: `1px solid ${C.borderL}`, flexShrink: 0, flexWrap: "wrap" }}>
         {[
           { color: C.navy,    label: "FAILURE RATE", dash: false },
           { color: C.mutedL,  label: "ROLLING AVG",  dash: true  },
-          { color: C.amber,   label: "10% WARNING",  dash: true  },
-          { color: C.crimson, label: "15% CRITICAL", dash: true  },
+          { color: C.amber,   label: "10% WARNING",  dash: true, zone: true, zoneBg: C.amberZ },
+          { color: C.crimson, label: "15% CRITICAL", dash: true, zone: true, zoneBg: C.crimsonZ },
         ].map(t => (
           <div key={t.label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <div style={{ width: 14, borderTop: `${t.dash ? "1px dashed" : "2px solid"} ${t.color}` }} />
+            {t.zone
+              ? <div style={{ width: 14, height: 8, background: t.zoneBg, border: `1px dashed ${t.color}` }} />
+              : <div style={{ width: 14, borderTop: `${t.dash ? "1px dashed" : "2px solid"} ${t.color}` }} />
+            }
             <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 1.5, color: t.color }}>{t.label}</span>
           </div>
         ))}
@@ -351,8 +462,8 @@ function FailureChart({ chartData }) {
   );
 }
 
-// ── Contracts — shortened + clickable ─────────────────────────
-function ContractsPanel({ blocks }) {
+// ── Contracts panel ───────────────────────────────────────────
+function ContractsPanel({ blocks, isMobile }) {
   const history = {};
   for (const b of blocks)
     for (const [addr, count] of Object.entries(b.topFailing || {}))
@@ -362,12 +473,16 @@ function ContractsPanel({ blocks }) {
   const max    = sorted[0]?.[1] || 1;
 
   return (
-    <HudPanel label="CONTRACT INTELLIGENCE" style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", minHeight: 0 }}>
+    <HudPanel label="CONTRACT INTELLIGENCE" style={{
+      display: "flex", flexDirection: "column",
+      height: isMobile ? "auto" : "100%",
+      overflow: "hidden", minHeight: 0,
+    }}>
       <div style={{ padding: "12px 18px 10px", borderBottom: `1px solid ${C.borderL}`, display: "flex", justifyContent: "space-between", flexShrink: 0 }}>
         <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL }}>FAILURE ACCUMULATION</span>
         <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL }}>{sorted.length} tracked</span>
       </div>
-      <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+      <div style={{ flex: isMobile ? "none" : 1, overflowY: isMobile ? "visible" : "auto", minHeight: 0 }}>
         {sorted.length === 0
           ? <div style={{ padding: "24px 18px", fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: C.mutedL }}>No failures yet.</div>
           : sorted.map(([addr, count], i) => {
@@ -375,34 +490,14 @@ function ContractsPanel({ blocks }) {
               const barColor  = intensity > 0.7 ? C.crimson : intensity > 0.4 ? C.amber : C.navy;
               const rowBg     = intensity > 0.7 ? C.crimsonG : intensity > 0.4 ? C.amberG : "transparent";
               const canClick  = isRealAddr(addr);
-
               return (
                 <div key={addr} style={{ padding: "10px 18px", borderBottom: `1px solid ${C.borderL}44`, background: rowBg }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, color: C.white, background: barColor, padding: "1px 6px", fontWeight: 700 }}>{i + 1}</span>
                       {canClick ? (
-                        <a
-                          href={explorerUrl(addr)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title={addr}
-                          style={{
-                            fontFamily: "'JetBrains Mono', monospace", fontSize: 9,
-                            color: intensity > 0.7 ? C.crimson : C.navy,
-                            textDecoration: "none",
-                            borderBottom: `1px dashed ${intensity > 0.7 ? C.crimson : C.borderL}`,
-                            cursor: "pointer",
-                          }}
-                          onMouseEnter={e => {
-                            e.currentTarget.style.color = intensity > 0.7 ? C.crimson : C.navyL;
-                            e.currentTarget.style.borderBottomColor = intensity > 0.7 ? C.crimson : C.navy;
-                          }}
-                          onMouseLeave={e => {
-                            e.currentTarget.style.color = intensity > 0.7 ? C.crimson : C.navy;
-                            e.currentTarget.style.borderBottomColor = intensity > 0.7 ? C.crimson : C.borderL;
-                          }}
-                        >
+                        <a href={explorerUrl(addr)} target="_blank" rel="noopener noreferrer" title={addr}
+                          style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: intensity > 0.7 ? C.crimson : C.navy, textDecoration: "none", borderBottom: `1px dashed ${intensity > 0.7 ? C.crimson : C.borderL}`, cursor: "pointer" }}>
                           {shortAddr(addr)}
                         </a>
                       ) : (
@@ -422,25 +517,46 @@ function ContractsPanel({ blocks }) {
   );
 }
 
+// ── Mobile signal bar — trend + insight ──────────────────────
+function MobileSignalBar({ trend, insight }) {
+  const trendColor = trend.includes("RISING") ? C.crimson : trend.includes("DROP") ? C.navyL : C.muted;
+  return (
+    <div style={{ background: C.panel, border: `1px solid ${C.border}`, padding: "10px 16px", flexShrink: 0 }}>
+      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 2, color: C.mutedL, marginBottom: 4 }}>TREND · INSIGHT</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: trendColor, fontWeight: 700 }}>{trend}</span>
+        <span style={{ color: C.borderL }}>·</span>
+        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: C.muted }}>{insight}</span>
+      </div>
+    </div>
+  );
+}
+
 // ── Alert toast ───────────────────────────────────────────────
-function AlertToast({ alert, onDismiss }) {
+function AlertToast({ alert, onDismiss, isMobile }) {
   const isCrit = alert.failureRate >= 0.15;
   const accent = isCrit ? C.crimson : C.amber;
   const bg     = isCrit ? "#FFF5F5" : "#FFFBF0";
 
   return (
     <div style={{
-      position: "fixed", top: 74, right: 24, zIndex: 999,
+      position: "fixed",
+      top: isMobile ? "auto" : 74,
+      bottom: isMobile ? 16 : "auto",
+      right: isMobile ? 12 : 24,
+      left: isMobile ? 12 : "auto",
+      zIndex: 999,
       background: bg, borderLeft: `5px solid ${accent}`,
       border: `1px solid ${accent}`, borderRadius: 1,
-      padding: "18px 22px", maxWidth: 390,
+      padding: "16px 18px",
+      maxWidth: isMobile ? "100%" : 390,
       boxShadow: `0 12px 50px ${accent}33, 0 4px 16px rgba(0,0,0,0.1)`,
       animation: "alertIn 0.3s cubic-bezier(0.34,1.56,0.64,1)",
     }}>
       <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: accent, animation: "pulse 1.5s ease-in-out infinite" }} />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
         <div>
-          <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 15, letterSpacing: 3, color: accent, display: "block" }}>
+          <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 14, letterSpacing: 3, color: accent, display: "block" }}>
             {isCrit ? "⛔  CRITICAL ALERT" : "⚠️  WARNING ALERT"}
           </span>
           <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL, letterSpacing: 1 }}>
@@ -449,7 +565,7 @@ function AlertToast({ alert, onDismiss }) {
         </div>
         <button onClick={onDismiss} style={{ background: "none", border: `1px solid ${C.borderL}`, color: C.muted, cursor: "pointer", fontSize: 11, padding: "2px 7px", borderRadius: 1, marginLeft: 12 }}>✕</button>
       </div>
-      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: C.text, marginBottom: 14, lineHeight: 1.8 }}>
+      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: C.text, marginBottom: 12, lineHeight: 1.8 }}>
         {isCrit ? "Severe" : "Abnormal"} failure spike —{" "}
         <span style={{ color: accent, fontWeight: 700, fontSize: 13 }}>{(alert.failureRate * 100).toFixed(0)}%</span>{" "}
         of transactions failed
@@ -465,9 +581,7 @@ function AlertToast({ alert, onDismiss }) {
               {shortAddr(alert.topContract)}
             </a>
           </div>
-        ) : alert.topContract ? (
-          <div>CONTRACT · unknown</div>
-        ) : null}
+        ) : alert.topContract ? <div>CONTRACT · unknown</div> : null}
       </div>
     </div>
   );
@@ -475,16 +589,16 @@ function AlertToast({ alert, onDismiss }) {
 
 // ── Main ──────────────────────────────────────────────────────
 export default function ArcSenseDashboard() {
-  const [blocks, setBlocks]     = useState([]);
-  const [alert, setAlert]       = useState(null);
-  const alertedBlocks           = useRef(new Set());
+  const [blocks, setBlocks] = useState([]);
+  const [alert, setAlert]   = useState(null);
+  const alertedBlocks       = useRef(new Set());
+  const isMobile            = useIsMobile();
 
   useEffect(() => {
     const fetchReports = async () => {
       try {
         const res  = await fetch("https://arcsense-lite-production.up.railway.app/reports");
         const data = await res.json();
-
         const mapped = data.map((r) => ({
           blockNumber: r.blockNumber,
           totalTx:     r.totalTx,
@@ -492,9 +606,7 @@ export default function ArcSenseDashboard() {
           failureRate: r.failureRate,
           topFailing:  r.topFailingContracts || {},
         }));
-
         setBlocks(mapped);
-
         const latest = mapped[mapped.length - 1];
         if (latest && latest.failureRate >= 0.10 && !alertedBlocks.current.has(latest.blockNumber)) {
           alertedBlocks.current.add(latest.blockNumber);
@@ -506,7 +618,6 @@ export default function ArcSenseDashboard() {
         console.error("Failed to fetch reports:", err);
       }
     };
-
     fetchReports();
     const iv = setInterval(fetchReports, 3000);
     return () => clearInterval(iv);
@@ -518,7 +629,7 @@ export default function ArcSenseDashboard() {
     ? latest.failureRate >= 0.15 ? "HIGH"
     : latest.failureRate >= 0.10 ? "MEDIUM"
     : "LOW" : "LOW";
-  const insight  = latest
+  const insight = latest
     ? latest.failureRate >= 0.15 ? "Elevated failure rate detected across multiple transactions."
     : latest.failureRate >= 0.10 ? "Moderate failure activity detected."
     : "Network operating within normal parameters."
@@ -535,12 +646,41 @@ export default function ArcSenseDashboard() {
     };
   });
 
+  const footer = (
+    <div style={{
+      borderTop: `1px solid ${C.border}`,
+      padding: isMobile ? "10px 16px" : "11px 32px",
+      display: "flex",
+      justifyContent: isMobile ? "center" : "space-between",
+      alignItems: "center",
+      background: C.panel, flexShrink: 0,
+      flexWrap: "wrap", gap: 8,
+    }}>
+      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 11, letterSpacing: 1, color: C.muted }}>
+        Powered by{" "}
+        <a href="https://x.com/arc" target="_blank" rel="noopener noreferrer"
+          style={{ color: C.navy, fontWeight: 700, textDecoration: "none" }}>Arc</a>
+      </span>
+      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 11, letterSpacing: 1, color: C.muted }}>
+        Built by{" "}
+        <a href="https://x.com/olumi441" target="_blank" rel="noopener noreferrer"
+          style={{ color: C.navy, fontWeight: 700, textDecoration: "none" }}>Abu Olumi</a>
+      </span>
+      {!isMobile && (
+        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9, letterSpacing: 2, color: C.mutedL }}>
+          Real-time signal intelligence for Arc Testnet
+        </span>
+      )}
+    </div>
+  );
+
   return (
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        html, body, #root { height: 100%; overflow: hidden; }
+        html, body, #root { height: 100%; }
+        body { overflow-x: hidden; }
         ::-webkit-scrollbar { width: 3px; }
         ::-webkit-scrollbar-track { background: ${C.bgDeep}; }
         ::-webkit-scrollbar-thumb { background: ${C.border}; }
@@ -550,48 +690,38 @@ export default function ArcSenseDashboard() {
         @keyframes pulse   { 0%,100%{opacity:1} 50%{opacity:0.4} }
       `}</style>
 
-      {/* Root: exactly viewport height, no overflow */}
-      <div style={{ background: C.bg, height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      {isMobile ? (
+        // ── MOBILE: stacked, scrollable ──────────────────────
+        <div style={{ background: C.bg, minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+          <TopBar trend={trend} severity={severity} insight={insight} latestBlock={latest?.blockNumber} isMobile={true} />
+          <MobileSignalBar trend={trend} insight={insight} />
 
-        <TopBar trend={trend} severity={severity} insight={insight} latestBlock={latest?.blockNumber} />
-
-        {/* Content area — grows to fill remaining space */}
-        <div style={{ flex: 1, padding: "14px 24px", display: "flex", flexDirection: "column", gap: 12, overflow: "hidden", minHeight: 0 }}>
-          <StatsRow blocks={blocks} />
-
-          {/* Three-column grid — fills remaining height exactly */}
-          <div style={{ display: "grid", gridTemplateColumns: "260px 1fr 300px", gap: 12, flex: 1, minHeight: 0, overflow: "hidden" }}>
-            <BlockFeed blocks={blocks} />
-            <FailureChart chartData={chartData} />
-            <ContractsPanel blocks={blocks} />
+          <div style={{ flex: 1, padding: "12px 12px", display: "flex", flexDirection: "column", gap: 12, overflowY: "auto" }}>
+            <StatsRow blocks={blocks} isMobile={true} />
+            <BlockFeed blocks={blocks} isMobile={true} />
+            <FailureChart chartData={chartData} isMobile={true} />
+            <ContractsPanel blocks={blocks} isMobile={true} />
           </div>
-        </div>
 
-        {/* Footer — always visible at bottom */}
-        <div style={{ borderTop: `1px solid ${C.border}`, padding: "11px 32px", display: "flex", justifyContent: "space-between", alignItems: "center", background: C.panel, flexShrink: 0 }}>
-          <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 11, letterSpacing: 1, color: C.muted }}>
-            Powered by{" "}
-            <a href="https://x.com/arc" target="_blank" rel="noopener noreferrer"
-              style={{ color: C.navy, fontWeight: 700, textDecoration: "none" }}
-              onMouseEnter={e => e.target.style.color = C.navyL}
-              onMouseLeave={e => e.target.style.color = C.navy}
-            >Arc</a>
-          </span>
-          <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 11, letterSpacing: 1, color: C.muted }}>
-            Built by{" "}
-            <a href="https://x.com/olumi441" target="_blank" rel="noopener noreferrer"
-              style={{ color: C.navy, fontWeight: 700, textDecoration: "none" }}
-              onMouseEnter={e => e.target.style.color = C.navyL}
-              onMouseLeave={e => e.target.style.color = C.navy}
-            >Abu Olumi</a>
-          </span>
-          <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9, letterSpacing: 2, color: C.mutedL }}>
-            Real-time signal intelligence for Arc Testnet
-          </span>
+          {footer}
         </div>
-      </div>
+      ) : (
+        // ── DESKTOP: fixed height, no scroll ─────────────────
+        <div style={{ background: C.bg, height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <TopBar trend={trend} severity={severity} insight={insight} latestBlock={latest?.blockNumber} isMobile={false} />
+          <div style={{ flex: 1, padding: "14px 24px", display: "flex", flexDirection: "column", gap: 12, overflow: "hidden", minHeight: 0 }}>
+            <StatsRow blocks={blocks} isMobile={false} />
+            <div style={{ display: "grid", gridTemplateColumns: "260px 1fr 300px", gap: 12, flex: 1, minHeight: 0, overflow: "hidden" }}>
+              <BlockFeed blocks={blocks} isMobile={false} />
+              <FailureChart chartData={chartData} isMobile={false} />
+              <ContractsPanel blocks={blocks} isMobile={false} />
+            </div>
+          </div>
+          {footer}
+        </div>
+      )}
 
-      {alert && <AlertToast alert={alert} onDismiss={() => setAlert(null)} />}
+      {alert && <AlertToast alert={alert} onDismiss={() => setAlert(null)} isMobile={isMobile} />}
     </>
   );
 }
