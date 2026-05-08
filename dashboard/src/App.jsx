@@ -123,25 +123,12 @@ function ChartTooltip({ active, payload, label }) {
   const status   = isCrit ? "CRITICAL" : isWarn ? "WARNING" : "NORMAL";
   const statusBg = isCrit ? C.crimsonG : isWarn ? C.amberG : C.navyG;
   return (
-    <div style={{
-      background: C.white,
-      border: `1px solid ${isCrit ? C.crimson : isWarn ? C.amber : C.border}`,
-      borderLeft: `3px solid ${valColor}`,
-      padding: "10px 14px", borderRadius: 1,
-      boxShadow: `0 4px 20px ${valColor}22`,
-      minWidth: 160,
-    }}>
+    <div style={{ background: C.white, border: `1px solid ${isCrit ? C.crimson : isWarn ? C.amber : C.border}`, borderLeft: `3px solid ${valColor}`, padding: "10px 14px", borderRadius: 1, boxShadow: `0 4px 20px ${valColor}22`, minWidth: 160 }}>
       <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 2, color: C.mutedL, marginBottom: 6 }}>BLOCK #{label}</div>
       <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: 22, color: valColor, lineHeight: 1 }}>{val.toFixed(1)}%</div>
       <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.muted, marginTop: 2 }}>failure rate</div>
-      {avg && (
-        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL, marginTop: 6, paddingTop: 6, borderTop: `1px solid ${C.borderL}` }}>
-          rolling avg · {avg.value.toFixed(1)}%
-        </div>
-      )}
-      <div style={{ marginTop: 8, display: "inline-block", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 2, color: valColor, background: statusBg, padding: "2px 6px", fontWeight: 700 }}>
-        {status}
-      </div>
+      {avg && <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL, marginTop: 6, paddingTop: 6, borderTop: `1px solid ${C.borderL}` }}>rolling avg · {avg.value.toFixed(1)}%</div>}
+      <div style={{ marginTop: 8, display: "inline-block", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 2, color: valColor, background: statusBg, padding: "2px 6px", fontWeight: 700 }}>{status}</div>
     </div>
   );
 }
@@ -214,34 +201,34 @@ function StatsRow({ blocks, isMobile, meta }) {
   const failed   = blocks.reduce((s, b) => s + b.failedTx, 0);
   const avgRate  = blocks.length ? (blocks.reduce((s, b) => s + b.failureRate, 0) / blocks.length * 100).toFixed(2) : "0.00";
   const avgFloat = parseFloat(avgRate);
-
-  // Use persistent meta counters when available
   const blocksScanned   = meta.totalBlocksScanned || blocks.length;
   const alertsTriggered = meta.totalAlertsTriggered || 0;
 
   const stats = [
-    { label: "BLOCKS SCANNED",     value: blocksScanned.toLocaleString(), sub: "processed",   size: 24, accent: C.navy,    color: C.charcoal },
-    { label: "TOTAL TRANSACTIONS", value: total.toLocaleString(),          sub: "on-chain",    size: 24, accent: C.navy,    color: C.charcoal },
-    { label: "TOTAL FAILURES",     value: failed.toLocaleString(),         sub: "detected",
-      size: failed > 0 ? 30 : 24, accent: failed > 0 ? C.crimson : C.navy,
-      color: failed > 0 ? C.crimson : C.charcoal, bg: failed > 0 ? C.crimsonG : "transparent",
-    },
-    { label: "AVG FAILURE RATE",   value: `${avgRate}%`,                   sub: "rolling avg",
-      size: avgFloat >= 10 ? 30 : avgFloat >= 5 ? 28 : 24,
+    { label: "BLOCKS SCANNED",     value: blocksScanned.toLocaleString(),    sub: "processed",   size: 24, accent: C.navy,    color: C.charcoal, spanFull: false },
+    { label: "TOTAL TRANSACTIONS", value: total.toLocaleString(),             sub: "on-chain",    size: 24, accent: C.navy,    color: C.charcoal, spanFull: false },
+    { label: "TOTAL FAILURES",     value: failed.toLocaleString(),            sub: "detected",    size: failed > 0 ? 30 : 24,
+      accent: failed > 0 ? C.crimson : C.navy, color: failed > 0 ? C.crimson : C.charcoal, bg: failed > 0 ? C.crimsonG : "transparent", spanFull: false },
+    { label: "AVG FAILURE RATE",   value: `${avgRate}%`,                      sub: "rolling avg", size: avgFloat >= 10 ? 30 : avgFloat >= 5 ? 28 : 24,
       accent: avgFloat >= 10 ? C.crimson : avgFloat >= 5 ? C.amber : C.navy,
       color:  avgFloat >= 10 ? C.crimson : avgFloat >= 5 ? C.amber : C.charcoal,
-      bg:     avgFloat >= 10 ? C.crimsonG : avgFloat >= 5 ? C.amberG : "transparent",
-    },
-    { label: "ALERTS TRIGGERED",   value: alertsTriggered.toLocaleString(), sub: "≥10% spikes",
-      size: alertsTriggered > 0 ? 30 : 24, accent: alertsTriggered > 0 ? C.crimson : C.navy,
-      color: alertsTriggered > 0 ? C.crimson : C.charcoal, bg: alertsTriggered > 0 ? C.crimsonG : "transparent",
+      bg:     avgFloat >= 10 ? C.crimsonG : avgFloat >= 5 ? C.amberG : "transparent", spanFull: false },
+    { label: "ALERTS TRIGGERED",   value: alertsTriggered.toLocaleString(),   sub: "≥10% spikes", size: alertsTriggered > 0 ? 30 : 24,
+      accent: alertsTriggered > 0 ? C.crimson : C.navy, color: alertsTriggered > 0 ? C.crimson : C.charcoal,
+      bg: alertsTriggered > 0 ? C.crimsonG : "transparent",
+      spanFull: true, // 5th card — span full width on mobile
     },
   ];
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(5,1fr)", gap: isMobile ? 8 : 10, flexShrink: 0 }}>
       {stats.map((s, i) => (
-        <HudPanel key={i} accent={s.accent} style={{ padding: isMobile ? "12px 14px" : "14px 18px", background: s.bg || C.panel }}>
+        <HudPanel key={i} accent={s.accent} style={{
+          padding: isMobile ? "12px 14px" : "14px 18px",
+          background: s.bg || C.panel,
+          // 5th card spans both columns on mobile
+          gridColumn: isMobile && s.spanFull ? "1 / -1" : "auto",
+        }}>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 2, color: s.color === C.charcoal ? C.mutedL : s.color, marginBottom: 6, opacity: 0.8 }}>{s.label}</div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: isMobile ? s.size - 4 : s.size, color: s.color, lineHeight: 1 }}>{s.value}</div>
           <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: C.mutedL, marginTop: 4 }}>{s.sub}</div>
@@ -257,7 +244,7 @@ function BlockFeed({ blocks, isMobile }) {
   useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight; }, [blocks]);
 
   return (
-    <HudPanel label="BLOCK FEED" style={{ display: "flex", flexDirection: "column", overflow: "hidden", height: isMobile ? 280 : "100%", minHeight: 0 }}>
+    <HudPanel label="BLOCK FEED" style={{ display: "flex", flexDirection: "column", overflow: "hidden", height: isMobile ? 300 : "100%", minHeight: 0 }}>
       <div style={{ padding: "12px 16px 10px", borderBottom: `1px solid ${C.borderL}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
         <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL }}>LIVE STREAM</span>
         <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL }}>{blocks.length}</span>
@@ -271,7 +258,7 @@ function BlockFeed({ blocks, isMobile }) {
           const topEntry = Object.entries(b.topFailing || {}).sort((a, z) => z[1] - a[1])[0];
           const topAddr  = topEntry?.[0] || null;
           return (
-            <div key={b.blockNumber} style={{ padding: "6px 16px", borderLeft: `2px solid ${isCrit ? C.crimson : isWarn ? C.amber : isNew ? C.navy : C.borderL}`, background: rowBg, transition: "background 0.8s", animation: i === arr.length - 1 ? "fadeIn 0.4s ease" : "none" }}>
+            <div key={b.blockNumber} style={{ padding: "7px 16px", borderLeft: `2px solid ${isCrit ? C.crimson : isWarn ? C.amber : isNew ? C.navy : C.borderL}`, background: rowBg, transition: "background 0.8s", animation: i === arr.length - 1 ? "fadeIn 0.4s ease" : "none" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: isCrit ? C.crimson : isNew ? C.navy : C.muted }}>#{b.blockNumber.toLocaleString()}</span>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -300,8 +287,7 @@ function BlockFeed({ blocks, isMobile }) {
 // ── Chart ─────────────────────────────────────────────────────
 function FailureChart({ chartData, isMobile }) {
   const spikeRanges = [];
-  let inSpike = false;
-  let spikeStart = null;
+  let inSpike = false, spikeStart = null;
   chartData.forEach((d, i) => {
     if (d.rate >= 10 && !inSpike) { inSpike = true; spikeStart = d.block; }
     else if (d.rate < 10 && inSpike) { inSpike = false; spikeRanges.push({ x1: spikeStart, x2: chartData[i - 1]?.block }); }
@@ -310,11 +296,11 @@ function FailureChart({ chartData, isMobile }) {
 
   return (
     <HudPanel label="FAILURE RATE · LAST 30 BLOCKS" style={{ display: "flex", flexDirection: "column", height: isMobile ? "auto" : "100%", overflow: "hidden", minHeight: 0 }}>
-      <div style={{ height: isMobile ? 220 : "100%", padding: "20px 8px 0 0", minHeight: 0, flexShrink: isMobile ? 0 : 1, flex: isMobile ? "none" : 1 }}>
+      <div style={{ height: isMobile ? 200 : "100%", padding: "16px 8px 0 0", minHeight: 0, flexShrink: isMobile ? 0 : 1, flex: isMobile ? "none" : 1 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 8, right: 20, bottom: 0, left: 0 }}>
+          <LineChart data={chartData} margin={{ top: 6, right: 16, bottom: 0, left: 0 }}>
             <XAxis dataKey="block" tick={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, fill: C.mutedL }} axisLine={{ stroke: C.borderL }} tickLine={false} tickFormatter={v => String(v).slice(-4)} interval="preserveStartEnd" />
-            <YAxis tick={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, fill: C.mutedL }} axisLine={false} tickLine={false} tickFormatter={v => `${v}%`} domain={[0, "auto"]} width={32} />
+            <YAxis tick={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, fill: C.mutedL }} axisLine={false} tickLine={false} tickFormatter={v => `${v}%`} domain={[0, "auto"]} width={30} />
             <Tooltip content={<ChartTooltip />} cursor={{ stroke: C.border, strokeWidth: 1, strokeDasharray: "4 2" }} />
             <ReferenceArea y1={10} y2={15}  fill={C.amberZ}   fillOpacity={1} />
             <ReferenceArea y1={15} y2={100} fill={C.crimsonZ} fillOpacity={1} />
@@ -322,11 +308,11 @@ function FailureChart({ chartData, isMobile }) {
             <ReferenceLine y={10} stroke={C.amber}  strokeDasharray="4 3" strokeWidth={1} />
             <ReferenceLine y={15} stroke={C.crimson} strokeDasharray="4 3" strokeWidth={1} />
             <Line type="monotone" dataKey="avg"  stroke={C.mutedL} strokeWidth={1} dot={false} strokeDasharray="6 3" activeDot={false} />
-            <Line type="monotone" dataKey="rate" stroke={C.navy}   strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: C.navy, stroke: C.white, strokeWidth: 2 }} />
+            <Line type="monotone" dataKey="rate" stroke={C.navy}   strokeWidth={2.5} dot={false} activeDot={{ r: 4, fill: C.navy, stroke: C.white, strokeWidth: 2 }} />
           </LineChart>
         </ResponsiveContainer>
       </div>
-      <div style={{ display: "flex", gap: 16, padding: "10px 16px 14px", borderTop: `1px solid ${C.borderL}`, flexShrink: 0, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 14, padding: "8px 16px 12px", borderTop: `1px solid ${C.borderL}`, flexShrink: 0, flexWrap: "wrap" }}>
         {[
           { color: C.navy,    label: "FAILURE RATE", dash: false },
           { color: C.mutedL,  label: "ROLLING AVG",  dash: true  },
@@ -335,7 +321,7 @@ function FailureChart({ chartData, isMobile }) {
         ].map(t => (
           <div key={t.label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
             {t.zone
-              ? <div style={{ width: 14, height: 8, background: t.zoneBg, border: `1px dashed ${t.color}` }} />
+              ? <div style={{ width: 14, height: 7, background: t.zoneBg, border: `1px dashed ${t.color}` }} />
               : <div style={{ width: 14, borderTop: `${t.dash ? "1px dashed" : "2px solid"} ${t.color}` }} />
             }
             <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 1.5, color: t.color }}>{t.label}</span>
@@ -396,7 +382,7 @@ function ContractsPanel({ blocks, isMobile }) {
 function MobileSignalBar({ trend, insight }) {
   const trendColor = trend.includes("RISING") ? C.crimson : trend.includes("DROP") ? C.navyL : C.muted;
   return (
-    <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderTop: "none", padding: "10px 16px", flexShrink: 0 }}>
+    <div style={{ background: C.panel, borderBottom: `1px solid ${C.border}`, padding: "10px 16px", flexShrink: 0 }}>
       <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 2, color: C.mutedL, marginBottom: 4 }}>TREND · INSIGHT</div>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
         <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: trendColor, fontWeight: 700, whiteSpace: "nowrap" }}>{trend}</span>
@@ -414,33 +400,24 @@ function AlertToast({ alert, onDismiss, isMobile }) {
   const bg     = isCrit ? "#FFF5F5" : "#FFFBF0";
   return (
     <div style={{
-      position: "fixed",
-      top: isMobile ? "auto" : 74,
-      bottom: isMobile ? 16 : "auto",
-      right: isMobile ? 12 : 24,
-      left: isMobile ? 12 : "auto",
-      zIndex: 999,
-      background: bg, borderLeft: `5px solid ${accent}`,
-      border: `1px solid ${accent}`, borderRadius: 1,
-      padding: "16px 18px",
-      maxWidth: isMobile ? "100%" : 390,
+      position: "fixed", top: isMobile ? "auto" : 74, bottom: isMobile ? 16 : "auto",
+      right: isMobile ? 12 : 24, left: isMobile ? 12 : "auto", zIndex: 999,
+      background: bg, borderLeft: `5px solid ${accent}`, border: `1px solid ${accent}`,
+      borderRadius: 1, padding: "16px 18px", maxWidth: isMobile ? "100%" : 390,
       boxShadow: `0 12px 50px ${accent}33, 0 4px 16px rgba(0,0,0,0.1)`,
       animation: "alertIn 0.3s cubic-bezier(0.34,1.56,0.64,1)",
     }}>
       <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: accent, animation: "pulse 1.5s ease-in-out infinite" }} />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
         <div>
-          <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 14, letterSpacing: 3, color: accent, display: "block" }}>
-            {isCrit ? "⛔  CRITICAL ALERT" : "⚠️  WARNING ALERT"}
-          </span>
+          <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 14, letterSpacing: 3, color: accent, display: "block" }}>{isCrit ? "⛔  CRITICAL ALERT" : "⚠️  WARNING ALERT"}</span>
           <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL, letterSpacing: 1 }}>{new Date().toLocaleTimeString()}</span>
         </div>
         <button onClick={onDismiss} style={{ background: "none", border: `1px solid ${C.borderL}`, color: C.muted, cursor: "pointer", fontSize: 11, padding: "2px 7px", borderRadius: 1, marginLeft: 12 }}>✕</button>
       </div>
       <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: C.text, marginBottom: 12, lineHeight: 1.8 }}>
         {isCrit ? "Severe" : "Abnormal"} failure spike —{" "}
-        <span style={{ color: accent, fontWeight: 700, fontSize: 13 }}>{(alert.failureRate * 100).toFixed(0)}%</span>{" "}
-        of transactions failed
+        <span style={{ color: accent, fontWeight: 700, fontSize: 13 }}>{(alert.failureRate * 100).toFixed(0)}%</span>{" "}of transactions failed
       </div>
       <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.muted, lineHeight: 2.2, borderTop: `1px solid ${accent}33`, paddingTop: 10, letterSpacing: 1 }}>
         <div>BLOCK · #{alert.blockNumber?.toLocaleString()}</div>
@@ -465,8 +442,7 @@ function Footer({ isMobile }) {
       justifyContent: isMobile ? "center" : "space-between",
       alignItems: "center",
       gap: isMobile ? 6 : 0,
-      background: C.panel,
-      flexShrink: 0,
+      background: C.panel, flexShrink: 0,
       textAlign: isMobile ? "center" : "left",
     }}>
       <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 11, letterSpacing: 1, color: C.muted }}>
@@ -499,11 +475,8 @@ export default function ArcSenseDashboard() {
       try {
         const res  = await fetch("https://arcsense-lite-production.up.railway.app/reports");
         const json = await res.json();
-
-        // Handle both new format { meta, reports } and old format []
         const data = Array.isArray(json) ? json : (json.reports || []);
         if (json.meta) setMeta(json.meta);
-
         const mapped = data.map((r) => ({
           blockNumber: r.blockNumber,
           totalTx:     r.totalTx,
@@ -511,9 +484,7 @@ export default function ArcSenseDashboard() {
           failureRate: r.failureRate,
           topFailing:  r.topFailingContracts || {},
         }));
-
         setBlocks(mapped);
-
         const latest = mapped[mapped.length - 1];
         if (latest && latest.failureRate >= 0.10 && !alertedBlocks.current.has(latest.blockNumber)) {
           alertedBlocks.current.add(latest.blockNumber);
@@ -532,11 +503,8 @@ export default function ArcSenseDashboard() {
 
   const latest   = blocks[blocks.length - 1];
   const trend    = getTrend(blocks);
-  const severity = latest
-    ? latest.failureRate >= 0.15 ? "HIGH"
-    : latest.failureRate >= 0.10 ? "MEDIUM"
-    : "LOW" : "LOW";
-  const insight = latest
+  const severity = latest ? latest.failureRate >= 0.15 ? "HIGH" : latest.failureRate >= 0.10 ? "MEDIUM" : "LOW" : "LOW";
+  const insight  = latest
     ? latest.failureRate >= 0.15 ? "Elevated failure rate detected across multiple transactions."
     : latest.failureRate >= 0.10 ? "Moderate failure activity detected."
     : "Network operating within normal parameters."
@@ -546,11 +514,7 @@ export default function ArcSenseDashboard() {
   const chartData = raw.map((b, i, arr) => {
     const window = arr.slice(Math.max(0, i - 4), i + 1);
     const avg    = window.reduce((s, x) => s + x.failureRate, 0) / window.length;
-    return {
-      block: b.blockNumber,
-      rate:  parseFloat((b.failureRate * 100).toFixed(2)),
-      avg:   parseFloat((avg * 100).toFixed(2)),
-    };
+    return { block: b.blockNumber, rate: parseFloat((b.failureRate * 100).toFixed(2)), avg: parseFloat((avg * 100).toFixed(2)) };
   });
 
   return (
@@ -570,7 +534,7 @@ export default function ArcSenseDashboard() {
       `}</style>
 
       {isMobile ? (
-        // ── MOBILE: stacked, fully scrollable, footer always reachable
+        // ── MOBILE: stacked, scrollable ──────────────────────
         <div style={{ background: C.bg, minHeight: "100dvh", display: "flex", flexDirection: "column" }}>
           <TopBar trend={trend} severity={severity} insight={insight} latestBlock={latest?.blockNumber} isMobile={true} />
           <MobileSignalBar trend={trend} insight={insight} />
@@ -583,12 +547,13 @@ export default function ArcSenseDashboard() {
           <Footer isMobile={true} />
         </div>
       ) : (
-        // ── DESKTOP: fixed viewport height
+        // ── DESKTOP: fixed viewport, wider feed, smaller chart
         <div style={{ background: C.bg, height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <TopBar trend={trend} severity={severity} insight={insight} latestBlock={latest?.blockNumber} isMobile={false} />
           <div style={{ flex: 1, padding: "14px 24px", display: "flex", flexDirection: "column", gap: 12, overflow: "hidden", minHeight: 0 }}>
             <StatsRow blocks={blocks} isMobile={false} meta={meta} />
-            <div style={{ display: "grid", gridTemplateColumns: "260px 1fr 300px", gap: 12, flex: 1, minHeight: 0, overflow: "hidden" }}>
+            {/* Feed wider (320px), chart slightly smaller, contracts same */}
+            <div style={{ display: "grid", gridTemplateColumns: "320px 1fr 280px", gap: 12, flex: 1, minHeight: 0, overflow: "hidden" }}>
               <BlockFeed blocks={blocks} isMobile={false} />
               <FailureChart chartData={chartData} isMobile={false} />
               <ContractsPanel blocks={blocks} isMobile={false} />
