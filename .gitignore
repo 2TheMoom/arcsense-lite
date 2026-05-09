@@ -6,3 +6,4 @@ reports/weekly-store.json
 publickey.txt
 scripts/
 reports/query-store.json
+reports/agent-log.json
