@@ -3,3 +3,5 @@ dashboard/node_modules/
 .env
 dist
 reports/weekly-store.json
+publickey.txt
+scripts/
