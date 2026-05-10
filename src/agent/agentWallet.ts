@@ -134,9 +134,9 @@ export async function payForIntelligence(
       destinationAddress:     SERVICE_WALLET_ADDRESS,
       walletId:               AGENT_WALLET_ID,
       blockchain:             "ARC-TESTNET",
-      tokenAddress:           "",
+      tokenAddress:           "",   // ← DELETE THIS LINE
       refId:                  queryId,
-    };
+   };
 
     console.log(`📤 Sending payment request:`);
     console.log(`   walletId (sender):   ${AGENT_WALLET_ID}`);

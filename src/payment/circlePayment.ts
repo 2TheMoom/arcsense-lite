@@ -1,6 +1,5 @@
 import * as https from "https";
 import * as crypto from "crypto";
-import * as fs from "fs";
 
 // ── Config ────────────────────────────────────────────────────
 const API_KEY       = process.env.CIRCLE_API_KEY!;
@@ -13,8 +12,8 @@ function generateCiphertext(): string {
   const publicKey = process.env.CIRCLE_ENTITY_PUBLIC_KEY!.replace(/\\n/g, "\n");
   const encrypted = crypto.publicEncrypt(
     {
-      key: publicKey,
-      padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+      key:      publicKey,
+      padding:  crypto.constants.RSA_PKCS1_OAEP_PADDING,
       oaepHash: "sha256",
     },
     Buffer.from(ENTITY_SECRET, "hex")
@@ -35,8 +34,8 @@ function circleRequest(
       path,
       method,
       headers: {
-        Authorization: `Bearer ${API_KEY}`,
-        "Content-Type": "application/json",
+        Authorization:    `Bearer ${API_KEY}`,
+        "Content-Type":   "application/json",
         "Content-Length": Buffer.byteLength(bodyStr),
       },
     };
@@ -46,8 +45,13 @@ function circleRequest(
       res.on("data", (chunk) => (data += chunk));
       res.on("end", () => {
         try {
-          resolve(JSON.parse(data));
+          const parsed = JSON.parse(data);
+          if (parsed.code && parsed.code !== 0) {
+            console.error("🔴 Circle API error:", JSON.stringify(parsed, null, 2));
+          }
+          resolve(parsed);
         } catch {
+          console.error("🔴 Raw Circle response:", data);
           reject(new Error("Failed to parse Circle API response"));
         }
       });
@@ -59,21 +63,20 @@ function circleRequest(
   });
 }
 
-// ── Send USDC payment request to payer ───────────────────────
+// ── Request USDC payment ──────────────────────────────────────
 export async function requestPayment(
   fromWalletAddress: string,
   queryId: string
 ): Promise<{ success: boolean; txId?: string; error?: string }> {
   try {
     const body = {
-      idempotencyKey:        crypto.randomUUID(),
+      idempotencyKey:         crypto.randomUUID(),
       entitySecretCiphertext: generateCiphertext(),
-      amounts:               [QUERY_PRICE.toString()],
-      destinationAddress:    process.env.CIRCLE_WALLET_ADDRESS!,
-      tokenAddress:          "", // native USDC on Arc
-      walletId:              WALLET_ID,
-      blockchain:            "ARC-TESTNET",
-      refId:                 queryId,
+      amounts:                [QUERY_PRICE.toFixed(2)],
+      destinationAddress:     process.env.CIRCLE_WALLET_ADDRESS!,
+      walletId:               WALLET_ID,
+      blockchain:             "ARC-TESTNET",
+      refId:                  queryId,
     };
 
     const response = await circleRequest(
@@ -130,9 +133,8 @@ export async function getWalletBalance(
       "GET",
       `/v1/w3s/wallets/${walletId}/balances`
     );
-
-    const tokens  = response.data?.tokenBalances || [];
-    const usdc    = tokens.find((t: any) => t.token?.symbol === "USDC");
+    const tokens = response.data?.tokenBalances || [];
+    const usdc   = tokens.find((t: any) => t.token?.symbol === "USDC");
     return parseFloat(usdc?.amount || "0");
   } catch {
     return 0;
