@@ -3,11 +3,18 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 
 // ── Config ────────────────────────────────────────────────────
-const API_KEY         = process.env.CIRCLE_API_KEY!;
-const ENTITY_SECRET   = process.env.CIRCLE_ENTITY_SECRET!;
-const AGENT_WALLET_ID = process.env.CIRCLE_WALLET_ID!;
-const ARCSENSE_ADDRESS = process.env.CIRCLE_WALLET_ADDRESS!;
-const QUERY_PRICE     = 0.1; // USDC
+const API_KEY              = process.env.CIRCLE_API_KEY!;
+const ENTITY_SECRET        = process.env.CIRCLE_ENTITY_SECRET!;
+
+// Agent wallet — sends USDC payments
+const AGENT_WALLET_ID      = process.env.CIRCLE_AGENT_WALLET_ID!;
+const AGENT_WALLET_ADDRESS = process.env.CIRCLE_AGENT_WALLET_ADDRESS!;
+
+// Service wallet — receives USDC payments
+const SERVICE_WALLET_ADDRESS = process.env.CIRCLE_WALLET_ADDRESS!;
+const SERVICE_WALLET_ID      = process.env.CIRCLE_WALLET_ID!;
+
+const QUERY_PRICE = 0.1; // USDC
 
 // ── Generate fresh ciphertext every call ─────────────────────
 function generateCiphertext(): string {
@@ -37,7 +44,6 @@ function circleRequest(method: string, path: string, body?: object): Promise<any
         "Content-Length": Buffer.byteLength(bodyStr),
       },
     };
-
     const req = https.request(options, (res) => {
       let data = "";
       res.on("data", (chunk) => (data += chunk));
@@ -46,7 +52,6 @@ function circleRequest(method: string, path: string, body?: object): Promise<any
         catch { reject(new Error("Failed to parse Circle API response")); }
       });
     });
-
     req.on("error", reject);
     if (bodyStr) req.write(bodyStr);
     req.end();
@@ -71,7 +76,25 @@ export async function getAgentBalance(): Promise<number> {
   }
 }
 
-// ── Send USDC payment to ArcSense intelligence API ───────────
+// ── Get service wallet USDC balance ──────────────────────────
+export async function getServiceBalance(): Promise<number> {
+  try {
+    const response = await circleRequest(
+      "GET",
+      `/v1/w3s/wallets/${SERVICE_WALLET_ID}/balances`
+    );
+    const tokens = response.data?.tokenBalances || [];
+    const usdc   = tokens.find((t: any) =>
+      t.token?.symbol === "USDC" || t.token?.name?.includes("USD")
+    );
+    return parseFloat(usdc?.amount || "0");
+  } catch (err: any) {
+    console.error("Failed to get service balance:", err.message);
+    return 0;
+  }
+}
+
+// ── Agent pays service wallet for intelligence ────────────────
 export async function payForIntelligence(
   queryId: string
 ): Promise<{ success: boolean; txId?: string; error?: string }> {
@@ -81,19 +104,19 @@ export async function payForIntelligence(
     if (balance < QUERY_PRICE) {
       return {
         success: false,
-        error:   `Insufficient balance. Has ${balance} USDC, needs ${QUERY_PRICE} USDC`,
+        error:   `Insufficient agent balance. Has ${balance} USDC, needs ${QUERY_PRICE} USDC`,
       };
     }
 
     const body = {
-      idempotencyKey:          crypto.randomUUID(),
-      entitySecretCiphertext:  generateCiphertext(),
-      amounts:                 [QUERY_PRICE.toFixed(2)],
-      destinationAddress:      ARCSENSE_ADDRESS,
-      walletId:                AGENT_WALLET_ID,
-      blockchain:              "ARC-TESTNET",
-      tokenAddress:            "",
-      refId:                   queryId,
+      idempotencyKey:         crypto.randomUUID(),
+      entitySecretCiphertext: generateCiphertext(),
+      amounts:                [QUERY_PRICE.toFixed(2)],
+      destinationAddress:     SERVICE_WALLET_ADDRESS, // ← service wallet receives
+      walletId:               AGENT_WALLET_ID,         // ← agent wallet sends
+      blockchain:             "ARC-TESTNET",
+      tokenAddress:           "",
+      refId:                  queryId,
     };
 
     const response = await circleRequest(
@@ -103,7 +126,10 @@ export async function payForIntelligence(
     );
 
     if (response.data?.id) {
-      console.log(`💸 Agent payment sent: ${response.data.id} for query ${queryId}`);
+      console.log(`💸 Agent→Service payment sent: ${response.data.id}`);
+      console.log(`   From: ${AGENT_WALLET_ADDRESS}`);
+      console.log(`   To:   ${SERVICE_WALLET_ADDRESS}`);
+      console.log(`   Amount: ${QUERY_PRICE} USDC`);
       return { success: true, txId: response.data.id };
     }
 
@@ -116,7 +142,7 @@ export async function payForIntelligence(
   }
 }
 
-// ── Verify payment is confirmed on chain ──────────────────────
+// ── Verify payment confirmed on chain ─────────────────────────
 export async function verifyAgentPayment(
   txId: string,
   maxRetries = 5,
@@ -135,16 +161,16 @@ export async function verifyAgentPayment(
       const confirmed = state === "CONFIRMED" || state === "COMPLETE";
 
       if (confirmed && amount >= QUERY_PRICE) {
-        console.log(`✅ Agent payment confirmed: ${amount} USDC (attempt ${attempt})`);
+        console.log(`✅ Payment confirmed: ${amount} USDC (attempt ${attempt})`);
         return { confirmed: true, amount };
       }
 
       if (state === "FAILED" || state === "CANCELLED") {
-        console.log(`❌ Agent payment ${state}: tx ${txId}`);
+        console.log(`❌ Payment ${state}: tx ${txId}`);
         return { confirmed: false };
       }
 
-      console.log(`⏳ Payment state: ${state || "PENDING"} — waiting (attempt ${attempt}/${maxRetries})`);
+      console.log(`⏳ Payment state: ${state || "PENDING"} (attempt ${attempt}/${maxRetries})`);
 
       if (attempt < maxRetries) {
         await new Promise((r) => setTimeout(r, delayMs));
@@ -157,4 +183,10 @@ export async function verifyAgentPayment(
   return { confirmed: false };
 }
 
-export { QUERY_PRICE, AGENT_WALLET_ID, ARCSENSE_ADDRESS };
+export {
+  QUERY_PRICE,
+  AGENT_WALLET_ID,
+  AGENT_WALLET_ADDRESS,
+  SERVICE_WALLET_ADDRESS,
+  SERVICE_WALLET_ID,
+};
