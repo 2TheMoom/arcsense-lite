@@ -1,8 +1,8 @@
 // ── Decision thresholds ───────────────────────────────────────
 const THRESHOLDS = {
-  HEALTH_SCORE_BUY_CONTRACT_SCAN: 95,   // temporarily high
-  FAILURE_RATE_BUY_BLOCK_ANALYSIS: 0.01, // temporarily low
-  FAILURE_RATE_CRITICAL: 0.15,           // critical threshold
+  HEALTH_SCORE_BUY_CONTRACT_SCAN: 85,   // fires when health score drops to 85 or below 
+  FAILURE_RATE_BUY_BLOCK_ANALYSIS: 0.03, // fires at 3% failure rate
+  FAILURE_RATE_CRITICAL: 0.10,           // critical at 10% failure rate
   MIN_BLOCKS_FOR_DECISION: 5,            // need at least 5 blocks to decide
 };
 
