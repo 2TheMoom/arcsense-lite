@@ -158,7 +158,7 @@ export async function runAgentCycle(): Promise<{
     console.log(`💸 Payment sent: ${paymentResult.txId}`);
 
     // ── Step 7: Verify payment ────────────────────────────────
-    const verified = await verifyAgentPayment(paymentResult.txId);
+    const verified = await verifyAgentPayment(paymentResult.txId, 10, 6000);
 
     if (!verified.confirmed) {
       const logged = logDecision({
