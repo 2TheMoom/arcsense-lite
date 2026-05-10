@@ -76,6 +76,7 @@ export async function requestPayment(
       destinationAddress:     process.env.CIRCLE_WALLET_ADDRESS!,
       walletId:               WALLET_ID,
       blockchain:             "ARC-TESTNET",
+      feeLevel:               "MEDIUM",
       refId:                  queryId,
     };
 

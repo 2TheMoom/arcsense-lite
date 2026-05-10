@@ -1,6 +1,5 @@
 import * as https from "https";
 import * as crypto from "crypto";
-import * as fs from "fs";
 
 // ── Config ────────────────────────────────────────────────────
 const API_KEY              = process.env.CIRCLE_API_KEY!;
@@ -50,7 +49,6 @@ function circleRequest(method: string, path: string, body?: object): Promise<any
       res.on("end", () => {
         try {
           const parsed = JSON.parse(data);
-          // Log any Circle API errors immediately
           if (parsed.code && parsed.code !== 0) {
             console.error("🔴 Circle API error response:");
             console.error(JSON.stringify(parsed, null, 2));
@@ -134,15 +132,16 @@ export async function payForIntelligence(
       destinationAddress:     SERVICE_WALLET_ADDRESS,
       walletId:               AGENT_WALLET_ID,
       blockchain:             "ARC-TESTNET",
-      tokenAddress:           "",   // ← DELETE THIS LINE
+      feeLevel:               "MEDIUM",
       refId:                  queryId,
-   };
+    };
 
     console.log(`📤 Sending payment request:`);
     console.log(`   walletId (sender):   ${AGENT_WALLET_ID}`);
     console.log(`   destination:         ${SERVICE_WALLET_ADDRESS}`);
     console.log(`   amount:              ${QUERY_PRICE} USDC`);
     console.log(`   blockchain:          ARC-TESTNET`);
+    console.log(`   feeLevel:            MEDIUM`);
 
     const response = await circleRequest(
       "POST",
