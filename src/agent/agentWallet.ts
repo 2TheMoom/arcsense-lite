@@ -170,6 +170,33 @@ export async function payForIntelligence(
   }
 }
 
+// ── Fetch on-chain tx hash from Circle after indexing ─────────
+export async function getOnChainTxHash(txId: string): Promise<string | null> {
+  try {
+    // Wait for Circle to index the transaction
+    console.log(`⏳ Waiting 15s for Circle to index transaction...`);
+    await new Promise(r => setTimeout(r, 15000));
+
+    const response = await circleRequest(
+      "GET",
+      `/v1/w3s/developer/transactions/${txId}`
+    );
+
+    const txHash = response.data?.transaction?.txHash || null;
+
+    if (txHash) {
+      console.log(`🔗 On-chain hash: ${txHash}`);
+    } else {
+      console.log(`⚠️  On-chain hash not yet available for ${txId}`);
+    }
+
+    return txHash;
+  } catch (err: any) {
+    console.error("Failed to fetch on-chain tx hash:", err.message);
+    return null;
+  }
+}
+
 // ── Verify payment confirmed on chain ─────────────────────────
 export async function verifyAgentPayment(
   txId: string,

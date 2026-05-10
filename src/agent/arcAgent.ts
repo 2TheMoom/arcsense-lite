@@ -17,6 +17,7 @@ import {
 import {
   payForIntelligence,
   getAgentBalance,
+  getOnChainTxHash,
 } from "./agentWallet";
 import {
   queryNetworkHealth,
@@ -134,7 +135,7 @@ export async function runAgentCycle(): Promise<{
     }
 
     // ── Step 7: Send payment ──────────────────────────────────
-    const queryId      = crypto.randomUUID();
+    const queryId       = crypto.randomUUID();
     const paymentResult = await payForIntelligence(queryId);
 
     if (!paymentResult.success || !paymentResult.txId) {
@@ -154,21 +155,26 @@ export async function runAgentCycle(): Promise<{
       return { cycleNumber: currentCycle, decision: logged, balance };
     }
 
-    // ── Step 8: Payment accepted — proceed immediately ────────
-    // Circle API on Arc Testnet has indexing delays — we trust the
-    // accepted txId as proof of payment. Balance reduction confirms it.
+    // ── Step 8: Payment accepted — fetch on-chain hash ────────
     console.log(`✅ Payment accepted by Circle: ${paymentResult.txId}`);
-    console.log(`   Arc Explorer: https://testnet.arcscan.app/tx/${paymentResult.txId}`);
 
-    // Log payment confirmation
+    // Fetch the real on-chain tx hash asynchronously
+    const txHash    = await getOnChainTxHash(paymentResult.txId);
+    const explorerUrl = txHash
+      ? `https://testnet.arcscan.app/tx/${txHash}`
+      : `https://testnet.arcscan.app`;
+
+    console.log(`🔗 Arc Explorer: ${explorerUrl}`);
+
+    // Log payment sent
     logDecision({
       type:        "PAYMENT_SENT",
       reasoning:   `Payment of 0.1 USDC accepted by Circle API`,
-      action:      `Sent 0.1 USDC — tx: ${paymentResult.txId}`,
+      action:      `Sent 0.1 USDC — tx: ${txHash || paymentResult.txId}`,
       paid:        true,
       amountPaid:  0.1,
-      txId:        paymentResult.txId,
-      data:        { snapshot, decision, paymentResult },
+      txId:        txHash || paymentResult.txId,
+      data:        { snapshot, decision, paymentResult, explorerUrl },
       cycleNumber: currentCycle,
     });
 
@@ -208,12 +214,12 @@ export async function runAgentCycle(): Promise<{
       }`,
       paid:        true,
       amountPaid:  0.1,
-      txId:        paymentResult.txId,
+      txId:        txHash || paymentResult.txId,
       data:        {
         snapshot,
         decision,
-        intelligence:  intelligenceData,
-        explorerUrl:   `https://testnet.arcscan.app/tx/${paymentResult.txId}`,
+        intelligence: intelligenceData,
+        explorerUrl,
       },
       cycleNumber: currentCycle,
     });
