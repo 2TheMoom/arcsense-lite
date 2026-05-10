@@ -133,10 +133,11 @@ export async function payForIntelligence(
       return { success: true, txId: response.data.id };
     }
 
+    console.error("Circle payment rejected:", JSON.stringify(response, null, 2));
     return {
-      success: false,
-      error:   response.message || JSON.stringify(response),
-    };
+       success: false,
+       error:   response.message || JSON.stringify(response),
+   };
   } catch (err: any) {
     return { success: false, error: err.message };
   }

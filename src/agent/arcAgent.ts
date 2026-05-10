@@ -26,7 +26,7 @@ import {
 } from "../api/intelligenceApi";
 
 // ── Config ────────────────────────────────────────────────────
-const AGENT_WALLET      = process.env.CIRCLE_WALLET_ADDRESS!;
+const AGENT_WALLET      = process.env.CIRCLE_AGENT_WALLET_ADDRESS!;
 const SCHEDULE_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const PAYMENT_MODE      = "prepay" as const;
 
