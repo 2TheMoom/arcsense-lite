@@ -60,7 +60,7 @@ function isRealAddr(addr) {
 function timeAgo(iso) {
   if (!iso) return "—";
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (diff < 60)  return `${diff}s ago`;
+  if (diff < 60)   return `${diff}s ago`;
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   return `${Math.floor(diff / 3600)}h ago`;
 }
@@ -195,9 +195,9 @@ function ScopedStatsRow({ blocks, selectedContract, isMobile }) {
   const lastBlock  = relevantBlocks[relevantBlocks.length - 1]?.blockNumber;
   const rateFloat  = parseFloat(failureRate);
   const stats = [
-    { label: "BLOCKS APPEARED IN", value: relevantBlocks.length.toString(), sub: "affected blocks",       size: 24, accent: C.navy,    color: C.charcoal },
-    { label: "TOTAL FAILURES",     value: totalFailures.toString(),          sub: "caused by contract",    size: totalFailures > 5 ? 30 : 24, accent: totalFailures > 0 ? C.crimson : C.navy, color: totalFailures > 0 ? C.crimson : C.charcoal, bg: totalFailures > 0 ? C.crimsonG : "transparent" },
-    { label: "CONTRACT FAIL RATE", value: `${failureRate}%`,                 sub: "of txs in those blocks",size: rateFloat >= 10 ? 30 : 24,   accent: rateFloat >= 10 ? C.crimson : rateFloat >= 5 ? C.amber : C.navy, color: rateFloat >= 10 ? C.crimson : rateFloat >= 5 ? C.amber : C.charcoal, bg: rateFloat >= 10 ? C.crimsonG : rateFloat >= 5 ? C.amberG : "transparent" },
+    { label: "BLOCKS APPEARED IN", value: relevantBlocks.length.toString(), sub: "affected blocks",        size: 24, accent: C.navy,    color: C.charcoal },
+    { label: "TOTAL FAILURES",     value: totalFailures.toString(),          sub: "caused by contract",     size: totalFailures > 5 ? 30 : 24, accent: totalFailures > 0 ? C.crimson : C.navy, color: totalFailures > 0 ? C.crimson : C.charcoal, bg: totalFailures > 0 ? C.crimsonG : "transparent" },
+    { label: "CONTRACT FAIL RATE", value: `${failureRate}%`,                 sub: "of txs in those blocks", size: rateFloat >= 10 ? 30 : 24, accent: rateFloat >= 10 ? C.crimson : rateFloat >= 5 ? C.amber : C.navy, color: rateFloat >= 10 ? C.crimson : rateFloat >= 5 ? C.amber : C.charcoal, bg: rateFloat >= 10 ? C.crimsonG : rateFloat >= 5 ? C.amberG : "transparent" },
     { label: "FIRST SEEN", value: firstBlock ? `#${firstBlock.toLocaleString()}` : "—", sub: "block number", size: 16, accent: C.navy, color: C.charcoal },
     { label: "LAST SEEN",  value: lastBlock  ? `#${lastBlock.toLocaleString()}`  : "—", sub: "block number", size: 16, accent: C.navy, color: C.charcoal, spanFull: true },
   ];
@@ -214,7 +214,7 @@ function ScopedStatsRow({ blocks, selectedContract, isMobile }) {
   );
 }
 
-// ── Global stats row — now with agent cards ───────────────────
+// ── Global stats row ──────────────────────────────────────────
 function StatsRow({ blocks, isMobile, meta, agentStatus }) {
   const total    = blocks.reduce((s, b) => s + b.totalTx, 0);
   const failed   = blocks.reduce((s, b) => s + b.failedTx, 0);
@@ -226,13 +226,13 @@ function StatsRow({ blocks, isMobile, meta, agentStatus }) {
   const usdcSpent       = agentStatus?.totalUsdcSpent || 0;
 
   const stats = [
-    { label: "BLOCKS SCANNED",     value: blocksScanned.toLocaleString(),    sub: "processed",   size: 24, accent: C.navy,    color: C.charcoal },
-    { label: "TOTAL TRANSACTIONS", value: total.toLocaleString(),             sub: "on-chain",    size: 24, accent: C.navy,    color: C.charcoal },
-    { label: "TOTAL FAILURES",     value: failed.toLocaleString(),            sub: "detected",    size: failed > 0 ? 30 : 24,  accent: failed > 0 ? C.crimson : C.navy, color: failed > 0 ? C.crimson : C.charcoal, bg: failed > 0 ? C.crimsonG : "transparent" },
-    { label: "AVG FAILURE RATE",   value: `${avgRate}%`,                      sub: "rolling avg", size: avgFloat >= 10 ? 30 : avgFloat >= 5 ? 28 : 24, accent: avgFloat >= 10 ? C.crimson : avgFloat >= 5 ? C.amber : C.navy, color: avgFloat >= 10 ? C.crimson : avgFloat >= 5 ? C.amber : C.charcoal, bg: avgFloat >= 10 ? C.crimsonG : avgFloat >= 5 ? C.amberG : "transparent" },
-    { label: "ALERTS TRIGGERED",   value: alertsTriggered.toLocaleString(),   sub: "≥10% spikes", size: alertsTriggered > 0 ? 30 : 24, accent: alertsTriggered > 0 ? C.crimson : C.navy, color: alertsTriggered > 0 ? C.crimson : C.charcoal, bg: alertsTriggered > 0 ? C.crimsonG : "transparent" },
-    { label: "AGENT CYCLES",       value: agentRuns.toLocaleString(),         sub: "autonomous",  size: agentRuns > 0 ? 26 : 24, accent: C.green, color: agentRuns > 0 ? C.green : C.charcoal, bg: agentRuns > 0 ? C.greenG : "transparent" },
-    { label: "USDC SPENT",         value: `$${usdcSpent.toFixed(2)}`,         sub: "by agent",    size: usdcSpent > 0 ? 26 : 24, accent: usdcSpent > 0 ? C.green : C.navy, color: usdcSpent > 0 ? C.green : C.charcoal, bg: usdcSpent > 0 ? C.greenG : "transparent", spanFull: true },
+    { label: "BLOCKS SCANNED",     value: blocksScanned.toLocaleString(),  sub: "processed",   size: 24, accent: C.navy,    color: C.charcoal },
+    { label: "TOTAL TRANSACTIONS", value: total.toLocaleString(),           sub: "on-chain",    size: 24, accent: C.navy,    color: C.charcoal },
+    { label: "TOTAL FAILURES",     value: failed.toLocaleString(),          sub: "detected",    size: failed > 0 ? 30 : 24, accent: failed > 0 ? C.crimson : C.navy, color: failed > 0 ? C.crimson : C.charcoal, bg: failed > 0 ? C.crimsonG : "transparent" },
+    { label: "AVG FAILURE RATE",   value: `${avgRate}%`,                    sub: "rolling avg", size: avgFloat >= 10 ? 30 : avgFloat >= 5 ? 28 : 24, accent: avgFloat >= 10 ? C.crimson : avgFloat >= 5 ? C.amber : C.navy, color: avgFloat >= 10 ? C.crimson : avgFloat >= 5 ? C.amber : C.charcoal, bg: avgFloat >= 10 ? C.crimsonG : avgFloat >= 5 ? C.amberG : "transparent" },
+    { label: "ALERTS TRIGGERED",   value: alertsTriggered.toLocaleString(), sub: "≥10% spikes", size: alertsTriggered > 0 ? 30 : 24, accent: alertsTriggered > 0 ? C.crimson : C.navy, color: alertsTriggered > 0 ? C.crimson : C.charcoal, bg: alertsTriggered > 0 ? C.crimsonG : "transparent" },
+    { label: "AGENT CYCLES",       value: agentRuns.toLocaleString(),       sub: "autonomous",  size: agentRuns > 0 ? 26 : 24, accent: C.green, color: agentRuns > 0 ? C.green : C.charcoal, bg: agentRuns > 0 ? C.greenG : "transparent" },
+    { label: "USDC SPENT",         value: `$${usdcSpent.toFixed(2)}`,       sub: "by agent",    size: usdcSpent > 0 ? 26 : 24, accent: usdcSpent > 0 ? C.green : C.navy, color: usdcSpent > 0 ? C.green : C.charcoal, bg: usdcSpent > 0 ? C.greenG : "transparent", spanFull: true },
   ];
 
   return (
@@ -331,8 +331,8 @@ function FailureChart({ chartData, isMobile, selectedContract }) {
         {[
           { color: selectedContract ? C.crimson : C.navy, label: selectedContract ? "CONTRACT RATE" : "FAILURE RATE", dash: false },
           { color: C.mutedL, label: "ROLLING AVG", dash: true },
-          { color: C.amber,  label: "10% WARNING",  zone: true, zoneBg: C.amberZ },
-          { color: C.crimson,label: "15% CRITICAL", zone: true, zoneBg: C.crimsonZ },
+          { color: C.amber,   label: "10% WARNING",  zone: true, zoneBg: C.amberZ },
+          { color: C.crimson, label: "15% CRITICAL", zone: true, zoneBg: C.crimsonZ },
         ].map(t => (
           <div key={t.label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
             {t.zone ? <div style={{ width: 14, height: 7, background: t.zoneBg, border: `1px dashed ${t.color}` }} /> : <div style={{ width: 14, borderTop: `${t.dash ? "1px dashed" : "2px solid"} ${t.color}` }} />}
@@ -405,10 +405,9 @@ function ContractsPanel({ blocks, isMobile, selectedContract, onSelectContract }
 
 // ── Agent Intelligence panel ──────────────────────────────────
 function AgentPanel({ agentStatus, agentLog, isMobile, onTrigger, triggering }) {
-  const status = triggering ? "RUNNING" : (agentStatus?.status || "IDLE");
+  const status      = triggering ? "RUNNING" : (agentStatus?.status || "IDLE");
   const statusColor = status === "RUNNING" ? C.green : status === "ERROR" ? C.crimson : C.muted;
-
-  const displayLog = isMobile ? (agentLog || []).slice(0, 5) : (agentLog || []).slice(0, 10);
+  const displayLog  = isMobile ? (agentLog || []).slice(0, 5) : (agentLog || []).slice(0, 10);
 
   return (
     <HudPanel label="AGENT INTELLIGENCE" accent={C.green} style={{ display: "flex", flexDirection: "column", height: isMobile ? "auto" : "100%", overflow: "hidden", minHeight: 0 }}>
@@ -425,10 +424,10 @@ function AgentPanel({ agentStatus, agentLog, isMobile, onTrigger, triggering }) 
       {/* Stats */}
       <div style={{ padding: "10px 14px", borderBottom: `1px solid ${C.borderL}`, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, flexShrink: 0 }}>
         {[
-          { label: "CYCLES",    value: agentStatus?.totalCycles?.toString() || "0" },
-          { label: "PAID",      value: agentStatus?.totalPaid?.toString() || "0" },
-          { label: "USDC SPENT",value: `$${(agentStatus?.totalUsdcSpent || 0).toFixed(2)}` },
-          { label: "LAST RUN",  value: timeAgo(agentStatus?.lastRunAt) },
+          { label: "CYCLES",     value: agentStatus?.totalCycles?.toString() || "0" },
+          { label: "PAID",       value: agentStatus?.totalPaid?.toString() || "0" },
+          { label: "USDC SPENT", value: `$${(agentStatus?.totalUsdcSpent || 0).toFixed(2)}` },
+          { label: "LAST RUN",   value: timeAgo(agentStatus?.lastRunAt) },
         ].map(s => (
           <div key={s.label}>
             <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 2, color: C.mutedL }}>{s.label}</div>
@@ -447,6 +446,14 @@ function AgentPanel({ agentStatus, agentLog, isMobile, onTrigger, triggering }) 
               const urgency   = d.data?.decision?.urgency || "LOW";
               const rowBg     = isPaid ? C.greenG : "transparent";
               const borderCol = isPaid ? C.green : C.borderL;
+
+              // Resolve Arc Explorer link from stored data or txId
+              const explorerLink = d.data?.explorerUrl && d.data.explorerUrl.includes("/tx/0x")
+                ? d.data.explorerUrl
+                : d.txId && d.txId.startsWith("0x")
+                  ? `https://testnet.arcscan.app/tx/${d.txId}`
+                  : null;
+
               return (
                 <div key={d.id || i} style={{ padding: "8px 14px", borderBottom: `1px solid ${C.borderL}33`, borderLeft: `2px solid ${borderCol}`, background: rowBg, animation: i === 0 ? "fadeIn 0.4s ease" : "none" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6 }}>
@@ -458,12 +465,37 @@ function AgentPanel({ agentStatus, agentLog, isMobile, onTrigger, triggering }) 
                     </div>
                     <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: C.mutedL, whiteSpace: "nowrap" }}>{timeAgo(d.timestamp)}</span>
                   </div>
+
                   <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: C.mutedL, marginTop: 3, lineHeight: 1.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {d.reasoning?.slice(0, 60)}{d.reasoning?.length > 60 ? "..." : ""}
                   </div>
+
+                  {/* Transaction link — clickable if on-chain hash available */}
                   {d.txId && (
-                    <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: C.green, marginTop: 2 }}>
-                      tx: {d.txId.slice(0, 8)}...
+                    <div style={{ marginTop: 3 }}>
+                      {explorerLink ? (
+                        <a
+                          href={explorerLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            fontFamily: "'JetBrains Mono', monospace",
+                            fontSize: 7,
+                            color: C.green,
+                            textDecoration: "none",
+                            borderBottom: `1px dashed ${C.green}`,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 3,
+                          }}
+                        >
+                          🔗 view on Arc Explorer
+                        </a>
+                      ) : (
+                        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: C.mutedL }}>
+                          tx: {d.txId.slice(0, 8)}...
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -629,7 +661,7 @@ export default function ArcSenseDashboard() {
   const alertedBlocks                   = useRef(new Set());
   const isMobile                        = useIsMobile();
 
-  // ── Fetch block reports every 3s ──────────────────────────
+  // ── Fetch block reports every 3s ─────────────────────────
   useEffect(() => {
     const fetchReports = async () => {
       try {
@@ -669,10 +701,8 @@ export default function ArcSenseDashboard() {
           fetch(`${API}/agent/status`),
           fetch(`${API}/agent/log?limit=10`),
         ]);
-        const statusJson = await statusRes.json();
-        const logJson    = await logRes.json();
-        setAgentStatus(statusJson);
-        setAgentLog(logJson.decisions || []);
+        setAgentStatus(await statusRes.json());
+        setAgentLog((await logRes.json()).decisions || []);
       } catch (err) {
         console.error("Failed to fetch agent data:", err);
       }
@@ -688,7 +718,6 @@ export default function ArcSenseDashboard() {
     setTriggering(true);
     try {
       await fetch(`${API}/agent/run`, { method: "POST" });
-      // Refresh agent data after trigger
       await new Promise(r => setTimeout(r, 2000));
       const [statusRes, logRes] = await Promise.all([
         fetch(`${API}/agent/status`),
@@ -745,7 +774,6 @@ export default function ArcSenseDashboard() {
       `}</style>
 
       {isMobile ? (
-        // ── MOBILE ───────────────────────────────────────────
         <div style={{ background: C.bg, minHeight: "100dvh", display: "flex", flexDirection: "column" }}>
           <TopBar trend={trend} severity={severity} insight={insight} latestBlock={latest?.blockNumber} isMobile={true} />
           <MobileSignalBar trend={trend} insight={insight} />
@@ -763,7 +791,6 @@ export default function ArcSenseDashboard() {
           <Footer isMobile={true} />
         </div>
       ) : (
-        // ── DESKTOP ───────────────────────────────────────────
         <div style={{ background: C.bg, height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <TopBar trend={trend} severity={severity} insight={insight} latestBlock={latest?.blockNumber} isMobile={false} />
           <div style={{ flex: 1, padding: "14px 24px", display: "flex", flexDirection: "column", gap: 10, overflow: "hidden", minHeight: 0 }}>
@@ -772,7 +799,6 @@ export default function ArcSenseDashboard() {
               ? <ScopedStatsRow blocks={blocks} selectedContract={selectedContract} isMobile={false} />
               : <StatsRow blocks={blocks} isMobile={false} meta={meta} agentStatus={agentStatus} />
             }
-            {/* 4-column grid: feed | chart | contracts | agent */}
             <div style={{ display: "grid", gridTemplateColumns: "280px 1fr 220px 220px", gap: 12, flex: 1, minHeight: 0, overflow: "hidden" }}>
               <BlockFeed blocks={blocks} isMobile={false} selectedContract={selectedContract} />
               <FailureChart chartData={chartData} isMobile={false} selectedContract={selectedContract} />
