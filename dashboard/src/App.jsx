@@ -405,7 +405,7 @@ function ContractsPanel({ blocks, isMobile, selectedContract, onSelectContract }
 
 // ── Agent Intelligence panel ──────────────────────────────────
 function AgentPanel({ agentStatus, agentLog, isMobile, onTrigger, triggering }) {
-  const status     = agentStatus?.status || "IDLE";
+  const status = triggering ? "RUNNING" : (agentStatus?.status || "IDLE");
   const statusColor = status === "RUNNING" ? C.green : status === "ERROR" ? C.crimson : C.muted;
 
   const displayLog = isMobile ? (agentLog || []).slice(0, 5) : (agentLog || []).slice(0, 10);
