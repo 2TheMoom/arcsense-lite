@@ -48,11 +48,24 @@ function circleRequest(method: string, path: string, body?: object): Promise<any
       let data = "";
       res.on("data", (chunk) => (data += chunk));
       res.on("end", () => {
-        try { resolve(JSON.parse(data)); }
-        catch { reject(new Error("Failed to parse Circle API response")); }
+        try {
+          const parsed = JSON.parse(data);
+          // Log any Circle API errors immediately
+          if (parsed.code && parsed.code !== 0) {
+            console.error("🔴 Circle API error response:");
+            console.error(JSON.stringify(parsed, null, 2));
+          }
+          resolve(parsed);
+        } catch {
+          console.error("🔴 Raw Circle response (unparseable):", data);
+          reject(new Error("Failed to parse Circle API response"));
+        }
       });
     });
-    req.on("error", reject);
+    req.on("error", (err) => {
+      console.error("🔴 Circle HTTP request error:", err.message);
+      reject(err);
+    });
     if (bodyStr) req.write(bodyStr);
     req.end();
   });
@@ -69,7 +82,9 @@ export async function getAgentBalance(): Promise<number> {
     const usdc   = tokens.find((t: any) =>
       t.token?.symbol === "USDC" || t.token?.name?.includes("USD")
     );
-    return parseFloat(usdc?.amount || "0");
+    const balance = parseFloat(usdc?.amount || "0");
+    console.log(`💰 Agent wallet balance: ${balance} USDC`);
+    return balance;
   } catch (err: any) {
     console.error("Failed to get agent balance:", err.message);
     return 0;
@@ -102,22 +117,32 @@ export async function payForIntelligence(
     const balance = await getAgentBalance();
 
     if (balance < QUERY_PRICE) {
+      console.error(`❌ Insufficient agent balance: ${balance} USDC (needs ${QUERY_PRICE})`);
       return {
         success: false,
         error:   `Insufficient agent balance. Has ${balance} USDC, needs ${QUERY_PRICE} USDC`,
       };
     }
 
+    const ciphertext = generateCiphertext();
+    console.log(`🔐 Ciphertext generated (length: ${ciphertext.length})`);
+
     const body = {
       idempotencyKey:         crypto.randomUUID(),
-      entitySecretCiphertext: generateCiphertext(),
+      entitySecretCiphertext: ciphertext,
       amounts:                [QUERY_PRICE.toFixed(2)],
-      destinationAddress:     SERVICE_WALLET_ADDRESS, // ← service wallet receives
-      walletId:               AGENT_WALLET_ID,         // ← agent wallet sends
+      destinationAddress:     SERVICE_WALLET_ADDRESS,
+      walletId:               AGENT_WALLET_ID,
       blockchain:             "ARC-TESTNET",
       tokenAddress:           "",
       refId:                  queryId,
     };
+
+    console.log(`📤 Sending payment request:`);
+    console.log(`   walletId (sender):   ${AGENT_WALLET_ID}`);
+    console.log(`   destination:         ${SERVICE_WALLET_ADDRESS}`);
+    console.log(`   amount:              ${QUERY_PRICE} USDC`);
+    console.log(`   blockchain:          ARC-TESTNET`);
 
     const response = await circleRequest(
       "POST",
@@ -133,12 +158,15 @@ export async function payForIntelligence(
       return { success: true, txId: response.data.id };
     }
 
-    console.error("Circle payment rejected:", JSON.stringify(response, null, 2));
+    console.error("❌ Circle payment rejected — full response:");
+    console.error(JSON.stringify(response, null, 2));
     return {
-       success: false,
-       error:   response.message || JSON.stringify(response),
-   };
+      success: false,
+      error:   response.message || JSON.stringify(response),
+    };
+
   } catch (err: any) {
+    console.error("💥 payForIntelligence exception:", err.message);
     return { success: false, error: err.message };
   }
 }
