@@ -4,7 +4,8 @@ import {
   ResponsiveContainer, ReferenceLine, ReferenceArea
 } from "recharts";
 
-const API = "https://arcsense-lite-production.up.railway.app";
+const API            = "https://arcsense-lite-production.up.railway.app";
+const SERVICE_WALLET = "0xb0717528602bc5bd26e143445a87846b2a5f6218";
 
 // ── Brand tokens ──────────────────────────────────────────────
 const C = {
@@ -411,8 +412,6 @@ function AgentPanel({ agentStatus, agentLog, isMobile, onTrigger, triggering }) 
 
   return (
     <HudPanel label="AGENT INTELLIGENCE" accent={C.green} style={{ display: "flex", flexDirection: "column", height: isMobile ? "auto" : "100%", overflow: "hidden", minHeight: 0 }}>
-
-      {/* Header */}
       <div style={{ padding: "12px 14px 10px", borderBottom: `1px solid ${C.borderL}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <div style={{ width: 6, height: 6, borderRadius: "50%", background: statusColor, animation: status === "RUNNING" ? "blink 1s ease-in-out infinite" : "none" }} />
@@ -420,8 +419,6 @@ function AgentPanel({ agentStatus, agentLog, isMobile, onTrigger, triggering }) 
         </div>
         <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 2, color: C.mutedL }}>AUTONOMOUS</span>
       </div>
-
-      {/* Stats */}
       <div style={{ padding: "10px 14px", borderBottom: `1px solid ${C.borderL}`, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, flexShrink: 0 }}>
         {[
           { label: "CYCLES",     value: agentStatus?.totalCycles?.toString() || "0" },
@@ -435,25 +432,20 @@ function AgentPanel({ agentStatus, agentLog, isMobile, onTrigger, triggering }) 
           </div>
         ))}
       </div>
-
-      {/* Decision log */}
       <div style={{ flex: isMobile ? "none" : 1, overflowY: isMobile ? "visible" : "auto", minHeight: 0 }}>
         <div style={{ padding: "8px 14px 4px", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 3, color: C.mutedL }}>DECISION LOG</div>
         {displayLog.length === 0
           ? <div style={{ padding: "12px 14px", fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL }}>Awaiting first cycle...</div>
           : displayLog.map((d, i) => {
-              const isPaid    = d.paid;
-              const urgency   = d.data?.decision?.urgency || "LOW";
-              const rowBg     = isPaid ? C.greenG : "transparent";
-              const borderCol = isPaid ? C.green : C.borderL;
-
-              // Resolve Arc Explorer link from stored data or txId
+              const isPaid      = d.paid;
+              const urgency     = d.data?.decision?.urgency || "LOW";
+              const rowBg       = isPaid ? C.greenG : "transparent";
+              const borderCol   = isPaid ? C.green : C.borderL;
               const explorerLink = d.data?.explorerUrl && d.data.explorerUrl.includes("/tx/0x")
                 ? d.data.explorerUrl
                 : d.txId && d.txId.startsWith("0x")
                   ? `https://testnet.arcscan.app/tx/${d.txId}`
                   : null;
-
               return (
                 <div key={d.id || i} style={{ padding: "8px 14px", borderBottom: `1px solid ${C.borderL}33`, borderLeft: `2px solid ${borderCol}`, background: rowBg, animation: i === 0 ? "fadeIn 0.4s ease" : "none" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6 }}>
@@ -465,64 +457,149 @@ function AgentPanel({ agentStatus, agentLog, isMobile, onTrigger, triggering }) 
                     </div>
                     <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: C.mutedL, whiteSpace: "nowrap" }}>{timeAgo(d.timestamp)}</span>
                   </div>
-
                   <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: C.mutedL, marginTop: 3, lineHeight: 1.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {d.reasoning?.slice(0, 60)}{d.reasoning?.length > 60 ? "..." : ""}
                   </div>
-
-                  {/* Transaction link — clickable if on-chain hash available */}
                   {d.txId && (
                     <div style={{ marginTop: 3 }}>
-                      {explorerLink ? (
-                        <a
-                          href={explorerLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{
-                            fontFamily: "'JetBrains Mono', monospace",
-                            fontSize: 7,
-                            color: C.green,
-                            textDecoration: "none",
-                            borderBottom: `1px dashed ${C.green}`,
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 3,
-                          }}
-                        >
-                          🔗 view on Arc Explorer
-                        </a>
-                      ) : (
-                        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: C.mutedL }}>
-                          tx: {d.txId.slice(0, 8)}...
-                        </span>
-                      )}
+                      {explorerLink
+                        ? <a href={explorerLink} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: C.green, textDecoration: "none", borderBottom: `1px dashed ${C.green}`, display: "inline-flex", alignItems: "center", gap: 3 }}>🔗 view on Arc Explorer</a>
+                        : <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: C.mutedL }}>tx: {d.txId.slice(0, 8)}...</span>
+                      }
                     </div>
                   )}
                 </div>
               );
             })}
       </div>
-
-      {/* Manual trigger button */}
       <div style={{ padding: "10px 14px", borderTop: `1px solid ${C.borderL}`, flexShrink: 0 }}>
-        <button
-          onClick={onTrigger}
-          disabled={triggering}
-          style={{
-            width: "100%",
-            background: triggering ? C.bgDeep : C.green,
-            border: `1px solid ${triggering ? C.border : C.green}`,
-            color: triggering ? C.muted : C.white,
-            fontFamily: "'Barlow Condensed', sans-serif",
-            fontSize: 10, letterSpacing: 3, fontWeight: 700,
-            padding: "8px 0", cursor: triggering ? "not-allowed" : "pointer",
-            borderRadius: 1, transition: "all 0.2s",
-          }}
-        >
+        <button onClick={onTrigger} disabled={triggering} style={{ width: "100%", background: triggering ? C.bgDeep : C.green, border: `1px solid ${triggering ? C.border : C.green}`, color: triggering ? C.muted : C.white, fontFamily: "'Barlow Condensed', sans-serif", fontSize: 10, letterSpacing: 3, fontWeight: 700, padding: "8px 0", cursor: triggering ? "not-allowed" : "pointer", borderRadius: 1, transition: "all 0.2s" }}>
           {triggering ? "⏳ RUNNING..." : "▶ TRIGGER MANUALLY"}
         </button>
       </div>
     </HudPanel>
+  );
+}
+
+// ── API Access modal ──────────────────────────────────────────
+function ApiAccessModal({ onClose, isMobile }) {
+  const [copied, setCopied] = useState(false);
+
+  const copyWallet = () => {
+    navigator.clipboard.writeText(SERVICE_WALLET).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  const endpoints = [
+    { method: "GET", path: "/api/intelligence/network",             desc: "Network health snapshot" },
+    { method: "GET", path: "/api/intelligence/contract/:address",   desc: "Contract risk score" },
+    { method: "GET", path: "/api/intelligence/block/:number",       desc: "Block analysis" },
+    { method: "GET", path: "/api/intelligence/usage",               desc: "Your usage stats" },
+    { method: "POST", path: "/api/intelligence/confirm/:queryId",   desc: "Confirm payment" },
+  ];
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: isMobile ? "flex-end" : "center", justifyContent: "center", background: "rgba(22,23,25,0.6)", backdropFilter: "blur(4px)", animation: "fadeIn 0.2s ease" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={{ background: C.panel, border: `1px solid ${C.border}`, width: isMobile ? "100%" : 560, maxHeight: isMobile ? "90dvh" : "85vh", overflowY: "auto", position: "relative", animation: isMobile ? "slideUp 0.3s ease" : "fadeIn 0.2s ease" }}>
+        <Corners color={C.navy} size={16} />
+
+        {/* Header */}
+        <div style={{ padding: "16px 20px", borderBottom: `1px solid ${C.borderL}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: 16, letterSpacing: 4, color: C.charcoal }}>API ACCESS</div>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL, marginTop: 2 }}>pay-per-query intelligence on Arc Testnet</div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: `1px solid ${C.borderL}`, color: C.muted, cursor: "pointer", fontSize: 12, padding: "3px 9px", fontFamily: "'Barlow Condensed', sans-serif" }}>✕</button>
+        </div>
+
+        {/* Pricing */}
+        <div style={{ padding: "14px 20px", borderBottom: `1px solid ${C.borderL}`, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+          {[
+            { label: "FREE TIER",     value: "5 queries",  sub: "per wallet", color: C.green  },
+            { label: "PRICE / QUERY", value: "0.1 USDC",   sub: "after free tier", color: C.navy   },
+            { label: "NETWORK",       value: "Arc Testnet", sub: "EVM compatible",  color: C.charcoal },
+          ].map(s => (
+            <div key={s.label} style={{ background: C.bg, border: `1px solid ${C.borderL}`, padding: "10px 12px" }}>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 2, color: C.mutedL }}>{s.label}</div>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 16, color: s.color, marginTop: 2 }}>{s.value}</div>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: C.mutedL, marginTop: 2 }}>{s.sub}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Service wallet */}
+        <div style={{ padding: "14px 20px", borderBottom: `1px solid ${C.borderL}` }}>
+          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL, marginBottom: 8 }}>PAYMENT DESTINATION</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, background: C.bg, border: `1px solid ${C.borderL}`, padding: "10px 12px" }}>
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: C.navy, fontWeight: 700, flex: 1, wordBreak: "break-all" }}>{SERVICE_WALLET}</span>
+            <button onClick={copyWallet} style={{ background: copied ? C.green : C.navy, border: "none", color: C.white, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9, letterSpacing: 2, padding: "5px 12px", flexShrink: 0, transition: "all 0.2s" }}>
+              {copied ? "✓ COPIED" : "COPY"}
+            </button>
+          </div>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL, marginTop: 6 }}>
+            Send USDC to this address on Arc Testnet using any EVM wallet
+          </div>
+        </div>
+
+        {/* Endpoints */}
+        <div style={{ padding: "14px 20px", borderBottom: `1px solid ${C.borderL}` }}>
+          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL, marginBottom: 8 }}>AVAILABLE ENDPOINTS</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {endpoints.map(e => (
+              <div key={e.path} style={{ display: "flex", alignItems: "flex-start", gap: 8, background: C.bg, border: `1px solid ${C.borderL}`, padding: "8px 12px" }}>
+                <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, fontWeight: 700, letterSpacing: 1, color: e.method === "POST" ? C.amber : C.green, flexShrink: 0, marginTop: 1 }}>{e.method}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: C.navy, wordBreak: "break-all" }}>{e.path}</div>
+                  <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, color: C.mutedL, marginTop: 2 }}>{e.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL, marginTop: 8 }}>
+            Add <span style={{ color: C.navy }}>?wallet=0xYOUR_ADDRESS&mode=prepay</span> to all GET requests
+          </div>
+        </div>
+
+        {/* How to pay */}
+        <div style={{ padding: "14px 20px", borderBottom: `1px solid ${C.borderL}` }}>
+          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL, marginBottom: 8 }}>HOW TO PAY</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {[
+              { n: "1", text: `Send 0.1 USDC to the service wallet above on Arc Testnet` },
+              { n: "2", text: `Copy your transaction hash (starts with 0x)` },
+              { n: "3", text: `Call POST /api/intelligence/confirm/:queryId` },
+              { n: "4", text: `Body: { "wallet": "0xYOURS", "txHash": "0xTX_HASH" }` },
+              { n: "5", text: `Intelligence data returned immediately` },
+            ].map(s => (
+              <div key={s.n} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 10, fontWeight: 700, color: C.white, background: C.navy, padding: "1px 7px", flexShrink: 0 }}>{s.n}</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: C.text, lineHeight: 1.6 }}>{s.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Selective queries */}
+        <div style={{ padding: "14px 20px" }}>
+          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL, marginBottom: 8 }}>SELECTIVE QUERIES</div>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.text, lineHeight: 2, background: C.bg, border: `1px solid ${C.borderL}`, padding: "10px 12px" }}>
+            <div style={{ color: C.mutedL }}># Contract risk only</div>
+            <div style={{ color: C.navy }}>GET /api/intelligence/contract/0xABC?wallet=0xYOURS</div>
+            <div style={{ color: C.mutedL, marginTop: 6 }}># Network health only</div>
+            <div style={{ color: C.navy }}>GET /api/intelligence/network?wallet=0xYOURS</div>
+            <div style={{ color: C.mutedL, marginTop: 6 }}># Specific block only</div>
+            <div style={{ color: C.navy }}>GET /api/intelligence/block/41234567?wallet=0xYOURS</div>
+          </div>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL, marginTop: 8 }}>
+            Each endpoint is independently gated. Pay only for what you query.
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -542,7 +619,7 @@ function MobileSignalBar({ trend, insight }) {
 }
 
 // ── Top bar ───────────────────────────────────────────────────
-function TopBar({ trend, severity, insight, latestBlock, isMobile }) {
+function TopBar({ trend, severity, insight, latestBlock, isMobile, onApiAccess }) {
   const sevColor   = severity === "HIGH" ? C.crimson : severity === "MEDIUM" ? C.amber : C.navy;
   const sevBg      = severity === "HIGH" ? C.crimsonG : severity === "MEDIUM" ? C.amberG : C.navyG;
   const trendColor = trend.includes("RISING") ? C.crimson : trend.includes("DROP") ? C.navyL : C.muted;
@@ -558,6 +635,7 @@ function TopBar({ trend, severity, insight, latestBlock, isMobile }) {
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button onClick={onApiAccess} style={{ background: C.navyG, border: `1px solid ${C.navy}44`, color: C.navy, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 2, fontWeight: 700, padding: "4px 10px" }}>API</button>
           <div style={{ background: sevBg, border: `1px solid ${sevColor}44`, padding: "4px 10px", textAlign: "center" }}>
             <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 2, color: C.mutedL }}>SEVERITY</div>
             <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 13, color: sevColor, letterSpacing: 3 }}>{severity}</div>
@@ -593,6 +671,13 @@ function TopBar({ trend, severity, insight, latestBlock, isMobile }) {
         ))}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        {/* API Access button */}
+        <button onClick={onApiAccess} style={{ background: C.navyG, border: `1px solid ${C.navy}44`, color: C.navy, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9, letterSpacing: 3, fontWeight: 700, padding: "6px 14px", transition: "all 0.2s" }}
+          onMouseEnter={e => { e.currentTarget.style.background = C.navy; e.currentTarget.style.color = C.white; }}
+          onMouseLeave={e => { e.currentTarget.style.background = C.navyG; e.currentTarget.style.color = C.navy; }}
+        >
+          ⚡ API ACCESS
+        </button>
         <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${C.navy}44`, padding: "5px 12px", background: C.navyG }}>
           <div style={{ width: 5, height: 5, borderRadius: "50%", background: C.navy, animation: "blink 1.8s ease-in-out infinite" }} />
           <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 10, letterSpacing: 3, color: C.navy, fontWeight: 600 }}>LIVE</span>
@@ -658,10 +743,10 @@ export default function ArcSenseDashboard() {
   const [agentStatus, setAgentStatus]   = useState(null);
   const [agentLog, setAgentLog]         = useState([]);
   const [triggering, setTriggering]     = useState(false);
+  const [showApiModal, setShowApiModal] = useState(false);
   const alertedBlocks                   = useRef(new Set());
   const isMobile                        = useIsMobile();
 
-  // ── Fetch block reports every 3s ─────────────────────────
   useEffect(() => {
     const fetchReports = async () => {
       try {
@@ -693,7 +778,6 @@ export default function ArcSenseDashboard() {
     return () => clearInterval(iv);
   }, []);
 
-  // ── Fetch agent data every 10s ────────────────────────────
   useEffect(() => {
     const fetchAgent = async () => {
       try {
@@ -712,7 +796,6 @@ export default function ArcSenseDashboard() {
     return () => clearInterval(iv);
   }, []);
 
-  // ── Manual agent trigger ──────────────────────────────────
   const handleTrigger = async () => {
     if (triggering) return;
     setTriggering(true);
@@ -767,15 +850,16 @@ export default function ArcSenseDashboard() {
         ::-webkit-scrollbar { width: 3px; }
         ::-webkit-scrollbar-track { background: ${C.bgDeep}; }
         ::-webkit-scrollbar-thumb { background: ${C.border}; }
-        @keyframes blink   { 0%,100%{opacity:1} 50%{opacity:0.25} }
-        @keyframes fadeIn  { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes alertIn { from{transform:translateX(40px) scale(0.95);opacity:0} to{transform:translateX(0) scale(1);opacity:1} }
-        @keyframes pulse   { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        @keyframes blink    { 0%,100%{opacity:1} 50%{opacity:0.25} }
+        @keyframes fadeIn   { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes slideUp  { from{transform:translateY(100%)} to{transform:translateY(0)} }
+        @keyframes alertIn  { from{transform:translateX(40px) scale(0.95);opacity:0} to{transform:translateX(0) scale(1);opacity:1} }
+        @keyframes pulse    { 0%,100%{opacity:1} 50%{opacity:0.4} }
       `}</style>
 
       {isMobile ? (
         <div style={{ background: C.bg, minHeight: "100dvh", display: "flex", flexDirection: "column" }}>
-          <TopBar trend={trend} severity={severity} insight={insight} latestBlock={latest?.blockNumber} isMobile={true} />
+          <TopBar trend={trend} severity={severity} insight={insight} latestBlock={latest?.blockNumber} isMobile={true} onApiAccess={() => setShowApiModal(true)} />
           <MobileSignalBar trend={trend} insight={insight} />
           <div style={{ flex: 1, padding: "12px", display: "flex", flexDirection: "column", gap: 12 }}>
             {selectedContract && selectedClass && <FilterBadge addr={selectedContract} classification={selectedClass} onClear={() => setSelected(null)} />}
@@ -792,7 +876,7 @@ export default function ArcSenseDashboard() {
         </div>
       ) : (
         <div style={{ background: C.bg, height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <TopBar trend={trend} severity={severity} insight={insight} latestBlock={latest?.blockNumber} isMobile={false} />
+          <TopBar trend={trend} severity={severity} insight={insight} latestBlock={latest?.blockNumber} isMobile={false} onApiAccess={() => setShowApiModal(true)} />
           <div style={{ flex: 1, padding: "14px 24px", display: "flex", flexDirection: "column", gap: 10, overflow: "hidden", minHeight: 0 }}>
             {selectedContract && selectedClass && <FilterBadge addr={selectedContract} classification={selectedClass} onClear={() => setSelected(null)} />}
             {selectedContract
@@ -811,6 +895,7 @@ export default function ArcSenseDashboard() {
       )}
 
       {alert && <AlertToast alert={alert} onDismiss={() => setAlert(null)} isMobile={isMobile} />}
+      {showApiModal && <ApiAccessModal onClose={() => setShowApiModal(false)} isMobile={isMobile} />}
     </>
   );
 }
