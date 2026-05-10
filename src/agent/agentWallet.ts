@@ -29,7 +29,7 @@ function generateCiphertext(): string {
   return encrypted.toString("base64");
 }
 
-// ── HTTP helper ───────────────────────────────────────────────
+// ── HTTP helper for Circle API ────────────────────────────────
 function circleRequest(method: string, path: string, body?: object): Promise<any> {
   return new Promise((resolve, reject) => {
     const bodyStr = body ? JSON.stringify(body) : "";
@@ -65,6 +65,28 @@ function circleRequest(method: string, path: string, body?: object): Promise<any
       reject(err);
     });
     if (bodyStr) req.write(bodyStr);
+    req.end();
+  });
+}
+
+// ── HTTP GET helper for Blockscout API ────────────────────────
+function blockscoutGet(path: string): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: "testnet.arcscan.app",
+      path,
+      method:   "GET",
+      headers:  { "Accept": "application/json" },
+    };
+    const req = https.request(options, (res) => {
+      let data = "";
+      res.on("data", (chunk) => (data += chunk));
+      res.on("end", () => {
+        try { resolve(JSON.parse(data)); }
+        catch { reject(new Error("Failed to parse Blockscout response")); }
+      });
+    });
+    req.on("error", reject);
     req.end();
   });
 }
@@ -170,24 +192,28 @@ export async function payForIntelligence(
   }
 }
 
-// ── Fetch on-chain tx hash from Circle after indexing ─────────
-export async function getOnChainTxHash(txId: string): Promise<string | null> {
+// ── Fetch on-chain tx hash via Blockscout API ─────────────────
+// Queries the most recent outgoing tx from the agent wallet
+export async function getOnChainTxHash(
+  walletAddress: string
+): Promise<string | null> {
   try {
-    // Wait for Circle to index the transaction
-    console.log(`⏳ Waiting 15s for Circle to index transaction...`);
-    await new Promise(r => setTimeout(r, 15000));
+    console.log(`⏳ Waiting 8s for tx to land on Arc Testnet...`);
+    await new Promise(r => setTimeout(r, 8000));
 
-    const response = await circleRequest(
-      "GET",
-      `/v1/w3s/developer/transactions/${txId}`
+    console.log(`🔍 Fetching latest tx from Blockscout for ${walletAddress}`);
+    const response = await blockscoutGet(
+      `/api/v2/addresses/${walletAddress}/transactions?filter=from`
     );
 
-    const txHash = response.data?.transaction?.txHash || null;
+    const latestTx = response?.items?.[0];
+    const txHash   = latestTx?.hash || null;
 
     if (txHash) {
-      console.log(`🔗 On-chain hash: ${txHash}`);
+      console.log(`🔗 On-chain tx hash: ${txHash}`);
+      console.log(`   Arc Explorer: https://testnet.arcscan.app/tx/${txHash}`);
     } else {
-      console.log(`⚠️  On-chain hash not yet available for ${txId}`);
+      console.log(`⚠️  No recent tx found for ${walletAddress} on Blockscout`);
     }
 
     return txHash;
@@ -197,58 +223,44 @@ export async function getOnChainTxHash(txId: string): Promise<string | null> {
   }
 }
 
-// ── Verify payment confirmed on chain ─────────────────────────
-export async function verifyAgentPayment(
-  txId: string,
-  maxRetries = 10,
-  delayMs    = 6000
-): Promise<{ confirmed: boolean; amount?: number }> {
+// ── Verify payment from ANY wallet via Blockscout (Option A) ──
+// Checks if the service wallet received USDC from a given wallet
+export async function verifyExternalPayment(
+  fromWalletAddress: string,
+  minAmount: number = QUERY_PRICE
+): Promise<{ confirmed: boolean; txHash?: string }> {
+  try {
+    console.log(`🔍 Verifying external payment from ${fromWalletAddress}`);
+    await new Promise(r => setTimeout(r, 5000));
 
-  // Wait before first check — tx needs time to propagate to Circle API
-  console.log(`⏳ Waiting 10s before first verification check...`);
-  await new Promise((r) => setTimeout(r, 10000));
+    // Fetch recent incoming txs to the service wallet
+    const response = await blockscoutGet(
+      `/api/v2/addresses/${SERVICE_WALLET_ADDRESS}/transactions?filter=to`
+    );
 
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const response = await circleRequest(
-        "GET",
-        `/v1/w3s/developer/transactions/${txId}`
-      );
+    const items = response?.items || [];
 
-      // Transaction not yet visible — treat as still pending
-      if (response.code === -1 || response.message === "Resource not found") {
-        console.log(`⏳ Transaction not yet visible on Circle API (attempt ${attempt}/${maxRetries})`);
-        if (attempt < maxRetries) await new Promise((r) => setTimeout(r, delayMs));
-        continue;
-      }
+    // Find a tx from the querying wallet
+    const match = items.find((tx: any) => {
+      const from   = (tx.from?.hash || "").toLowerCase();
+      const target = fromWalletAddress.toLowerCase();
+      const value  = parseFloat(tx.value || "0") / 1e18; // USDC native = 18 decimals
+      return from === target && value >= minAmount;
+    });
 
-      const tx        = response.data?.transaction;
-      const state     = tx?.state;
-      const amount    = parseFloat(tx?.amounts?.[0] || "0");
-      const confirmed = state === "CONFIRMED" || state === "COMPLETE";
-
-      if (confirmed && amount >= QUERY_PRICE) {
-        console.log(`✅ Payment confirmed: ${amount} USDC (attempt ${attempt})`);
-        return { confirmed: true, amount };
-      }
-
-      if (state === "FAILED" || state === "CANCELLED") {
-        console.log(`❌ Payment ${state}: tx ${txId}`);
-        return { confirmed: false };
-      }
-
-      console.log(`⏳ Payment state: ${state || "PENDING"} (attempt ${attempt}/${maxRetries})`);
-
-      if (attempt < maxRetries) {
-        await new Promise((r) => setTimeout(r, delayMs));
-      }
-    } catch (err: any) {
-      console.error(`Payment check error (attempt ${attempt}):`, err.message);
-      if (attempt < maxRetries) await new Promise((r) => setTimeout(r, delayMs));
+    if (match) {
+      console.log(`✅ External payment verified: ${match.hash}`);
+      console.log(`   From: ${fromWalletAddress}`);
+      console.log(`   To:   ${SERVICE_WALLET_ADDRESS}`);
+      return { confirmed: true, txHash: match.hash };
     }
-  }
 
-  return { confirmed: false };
+    console.log(`⚠️  No matching payment found from ${fromWalletAddress}`);
+    return { confirmed: false };
+  } catch (err: any) {
+    console.error("Failed to verify external payment:", err.message);
+    return { confirmed: false };
+  }
 }
 
 export {

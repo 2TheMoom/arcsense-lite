@@ -18,6 +18,7 @@ import {
   payForIntelligence,
   getAgentBalance,
   getOnChainTxHash,
+  AGENT_WALLET_ADDRESS,
 } from "./agentWallet";
 import {
   queryNetworkHealth,
@@ -155,14 +156,14 @@ export async function runAgentCycle(): Promise<{
       return { cycleNumber: currentCycle, decision: logged, balance };
     }
 
-    // ── Step 8: Payment accepted — fetch on-chain hash ────────
     console.log(`✅ Payment accepted by Circle: ${paymentResult.txId}`);
 
-    // Fetch the real on-chain tx hash asynchronously
-    const txHash    = await getOnChainTxHash(paymentResult.txId);
+    // ── Step 8: Fetch real on-chain hash via Blockscout ───────
+    // Pass the agent wallet address — Blockscout looks up its latest tx
+    const txHash      = await getOnChainTxHash(AGENT_WALLET_ADDRESS);
     const explorerUrl = txHash
       ? `https://testnet.arcscan.app/tx/${txHash}`
-      : `https://testnet.arcscan.app`;
+      : `https://testnet.arcscan.app/address/${AGENT_WALLET_ADDRESS}`;
 
     console.log(`🔗 Arc Explorer: ${explorerUrl}`);
 
