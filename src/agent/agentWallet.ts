@@ -18,7 +18,7 @@ const QUERY_PRICE = 0.1; // USDC
 
 // ── Generate fresh ciphertext every call ─────────────────────
 function generateCiphertext(): string {
-  const publicKey = fs.readFileSync("publickey.txt", "utf8").trim();
+  const publicKey = process.env.CIRCLE_ENTITY_PUBLIC_KEY!.replace(/\\n/g, "\n");
   const encrypted = crypto.publicEncrypt(
     {
       key:      publicKey,
