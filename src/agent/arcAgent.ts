@@ -1,4 +1,5 @@
 import * as crypto from "crypto";
+import * as https from "https";
 import {
   logDecision,
   incrementCycle,
@@ -21,13 +22,13 @@ import {
   AGENT_WALLET_ADDRESS,
 } from "./agentWallet";
 import {
-  queryNetworkHealth,
   queryContractIntelligence,
   queryBlockAnalysis,
 } from "../api/intelligenceApi";
 
 // ── Config ────────────────────────────────────────────────────
 const AGENT_WALLET      = process.env.CIRCLE_AGENT_WALLET_ADDRESS!;
+const REPORTS_URL       = "https://arcsense-lite-production.up.railway.app/reports";
 const SCHEDULE_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const PAYMENT_MODE      = "prepay" as const;
 
@@ -35,6 +36,74 @@ const PAYMENT_MODE      = "prepay" as const;
 let isRunning       = false;
 let schedulerHandle: ReturnType<typeof setInterval> | null = null;
 let currentCycle    = 0;
+
+// ── Direct health fetch — bypasses payment gate entirely ──────
+// Reads from /reports directly so agent never consumes free queries
+async function fetchNetworkHealthDirect(): Promise<{
+  success: boolean;
+  data?: NetworkSnapshot & {
+    totalTransactions: number;
+    timestamp: string;
+  };
+  error?: string;
+}> {
+  return new Promise((resolve) => {
+    https.get(REPORTS_URL, (res) => {
+      let raw = "";
+      res.on("data", (chunk) => (raw += chunk));
+      res.on("end", () => {
+        try {
+          const json    = JSON.parse(raw);
+          const reports = Array.isArray(json) ? json : (json.reports || []);
+          const recent  = reports.slice(-30);
+
+          if (recent.length === 0) {
+            resolve({ success: false, error: "No block data available yet" });
+            return;
+          }
+
+          const totalTx  = recent.reduce((s: number, b: any) => s + (b.totalTx || 0), 0);
+          const failed   = recent.reduce((s: number, b: any) => s + (b.failedTx || 0), 0);
+          const avgRate  = recent.reduce((s: number, b: any) => s + (b.failureRate || 0), 0) / recent.length;
+          const health   = Math.max(0, Math.round(100 - avgRate * 400));
+          const latest   = reports[reports.length - 1];
+
+          // Build top failing contracts from recent blocks
+          const contractMap: Record<string, number> = {};
+          for (const b of recent) {
+            for (const [addr, count] of Object.entries(b.topFailingContracts || {})) {
+              contractMap[addr] = (contractMap[addr] || 0) + (count as number);
+            }
+          }
+
+          const topFailingContracts = Object.entries(contractMap)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([address, failures]) => ({ address, failures }));
+
+          resolve({
+            success: true,
+            data: {
+              healthScore:         health,
+              status:              health >= 80 ? "HEALTHY" : health >= 50 ? "DEGRADED" : "CRITICAL",
+              avgFailureRate:      `${(avgRate * 100).toFixed(2)}%`,
+              blocksAnalyzed:      recent.length,
+              totalFailures:       failed,
+              totalTransactions:   totalTx,
+              topFailingContracts,
+              latestBlock:         latest?.blockNumber || null,
+              timestamp:           new Date().toISOString(),
+            },
+          });
+        } catch (e: any) {
+          resolve({ success: false, error: e.message });
+        }
+      });
+    }).on("error", (e) => {
+      resolve({ success: false, error: e.message });
+    });
+  });
+}
 
 // ── Core agent cycle ──────────────────────────────────────────
 export async function runAgentCycle(): Promise<{
@@ -62,13 +131,14 @@ export async function runAgentCycle(): Promise<{
     const balance = await getAgentBalance();
     console.log(`💰 Agent balance: ${balance} USDC`);
 
-    // ── Step 2: Fetch network health (free tier) ─────────────
-    const healthResponse = await queryNetworkHealth(AGENT_WALLET, "prepay");
+    // ── Step 2: Fetch network health directly (free, no query gate)
+    console.log(`📡 Fetching network health directly from /reports...`);
+    const healthResponse = await fetchNetworkHealthDirect();
 
     if (!healthResponse.success || !healthResponse.data) {
       const decision = logDecision({
         type:        "ERROR",
-        reasoning:   "Failed to fetch network health from intelligence API",
+        reasoning:   `Failed to fetch network health: ${healthResponse.error}`,
         action:      "Skipped cycle — no data available",
         paid:        false,
         amountPaid:  0,
@@ -93,7 +163,7 @@ export async function runAgentCycle(): Promise<{
       latestBlock:         healthResponse.data.latestBlock,
     };
 
-    console.log(`📊 Network: ${snapshot.status} | Health: ${snapshot.healthScore}/100 | Failures: ${snapshot.avgFailureRate}`);
+    console.log(`📊 Network: ${snapshot.status} | Health: ${snapshot.healthScore}/100 | Failures: ${snapshot.avgFailureRate} | Blocks: ${snapshot.blocksAnalyzed}`);
 
     // ── Step 4: Make decision ─────────────────────────────────
     const decision = makeDecision(snapshot);
@@ -104,7 +174,7 @@ export async function runAgentCycle(): Promise<{
       const logged = logDecision({
         type:        "NO_ACTION",
         reasoning:   decision.reasoning,
-        action:      "Network healthy — no intelligence purchase needed",
+        action:      "Network within acceptable parameters — no purchase needed",
         paid:        false,
         amountPaid:  0,
         txId:        null,
@@ -159,7 +229,6 @@ export async function runAgentCycle(): Promise<{
     console.log(`✅ Payment accepted by Circle: ${paymentResult.txId}`);
 
     // ── Step 8: Fetch real on-chain hash via Blockscout ───────
-    // Pass the agent wallet address — Blockscout looks up its latest tx
     const txHash      = await getOnChainTxHash(AGENT_WALLET_ADDRESS);
     const explorerUrl = txHash
       ? `https://testnet.arcscan.app/tx/${txHash}`
@@ -170,7 +239,7 @@ export async function runAgentCycle(): Promise<{
     // Log payment sent
     logDecision({
       type:        "PAYMENT_SENT",
-      reasoning:   `Payment of 0.1 USDC accepted by Circle API`,
+      reasoning:   `Payment of 0.1 USDC sent to ArcSense service wallet`,
       action:      `Sent 0.1 USDC — tx: ${txHash || paymentResult.txId}`,
       paid:        true,
       amountPaid:  0.1,
