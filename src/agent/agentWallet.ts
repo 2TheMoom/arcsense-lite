@@ -76,8 +76,8 @@ export async function getAgentBalance(): Promise<number> {
       "GET",
       `/v1/w3s/wallets/${AGENT_WALLET_ID}/balances`
     );
-    const tokens = response.data?.tokenBalances || [];
-    const usdc   = tokens.find((t: any) =>
+    const tokens  = response.data?.tokenBalances || [];
+    const usdc    = tokens.find((t: any) =>
       t.token?.symbol === "USDC" || t.token?.name?.includes("USD")
     );
     const balance = parseFloat(usdc?.amount || "0");
@@ -173,15 +173,27 @@ export async function payForIntelligence(
 // ── Verify payment confirmed on chain ─────────────────────────
 export async function verifyAgentPayment(
   txId: string,
-  maxRetries = 5,
-  delayMs    = 3000
+  maxRetries = 10,
+  delayMs    = 6000
 ): Promise<{ confirmed: boolean; amount?: number }> {
+
+  // Wait before first check — tx needs time to propagate to Circle API
+  console.log(`⏳ Waiting 10s before first verification check...`);
+  await new Promise((r) => setTimeout(r, 10000));
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const response = await circleRequest(
         "GET",
         `/v1/w3s/developer/transactions/${txId}`
       );
+
+      // Transaction not yet visible — treat as still pending
+      if (response.code === -1 || response.message === "Resource not found") {
+        console.log(`⏳ Transaction not yet visible on Circle API (attempt ${attempt}/${maxRetries})`);
+        if (attempt < maxRetries) await new Promise((r) => setTimeout(r, delayMs));
+        continue;
+      }
 
       const tx        = response.data?.transaction;
       const state     = tx?.state;
@@ -205,6 +217,7 @@ export async function verifyAgentPayment(
       }
     } catch (err: any) {
       console.error(`Payment check error (attempt ${attempt}):`, err.message);
+      if (attempt < maxRetries) await new Promise((r) => setTimeout(r, delayMs));
     }
   }
 
