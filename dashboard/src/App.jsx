@@ -407,10 +407,6 @@ function ContractsPanel({ blocks, isMobile, selectedContract, onSelectContract }
 function AgentPanel({ agentStatus, agentLog, isMobile, onTrigger, triggering }) {
   const status     = agentStatus?.status || "IDLE";
   const statusColor = status === "RUNNING" ? C.green : status === "ERROR" ? C.crimson : C.muted;
-  const statusBg    = status === "RUNNING" ? C.greenG : status === "ERROR" ? C.crimsonG : "transparent";
-
-  const urgencyColor = (u) => u === "CRITICAL" ? C.crimson : u === "HIGH" ? C.amber : u === "MEDIUM" ? C.amber : C.green;
-  const urgencyIcon  = (u) => u === "CRITICAL" ? "🔴" : u === "HIGH" ? "🟠" : u === "MEDIUM" ? "🟡" : "🟢";
 
   const displayLog = isMobile ? (agentLog || []).slice(0, 5) : (agentLog || []).slice(0, 10);
 
@@ -455,7 +451,7 @@ function AgentPanel({ agentStatus, agentLog, isMobile, onTrigger, triggering }) 
                 <div key={d.id || i} style={{ padding: "8px 14px", borderBottom: `1px solid ${C.borderL}33`, borderLeft: `2px solid ${borderCol}`, background: rowBg, animation: i === 0 ? "fadeIn 0.4s ease" : "none" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 5, flex: 1 }}>
-                      <span style={{ fontSize: 9 }}>{urgencyIcon(urgency)}</span>
+                      <span style={{ fontSize: 9 }}>{urgency === "CRITICAL" ? "🔴" : urgency === "HIGH" ? "🟠" : urgency === "MEDIUM" ? "🟡" : "🟢"}</span>
                       <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 1, color: isPaid ? C.green : C.muted, fontWeight: isPaid ? 700 : 400, lineHeight: 1.3, flex: 1 }}>
                         {isPaid ? `PAID $${d.amountPaid} USDC` : "NO ACTION"}
                       </span>
