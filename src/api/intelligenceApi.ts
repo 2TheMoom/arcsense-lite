@@ -2,6 +2,9 @@ import * as crypto from "crypto";
 import {
   hasFreeQueries,
   deductFreeQuery,
+  hasPaidCredits,
+  deductPaidCredit,
+  addPaidCredit,
   recordPaidQuery,
   getOrCreateWallet,
   setPendingPayment,
@@ -22,11 +25,11 @@ import {
 
 // ── Types ─────────────────────────────────────────────────────
 export type IntelligenceResponse = {
-  success:    boolean;
-  queryId:    string;
-  data?:      any;
-  payment?:   PaymentRequired;
-  error?:     string;
+  success:  boolean;
+  queryId:  string;
+  data?:    any;
+  payment?: PaymentRequired;
+  error?:   string;
 };
 
 export type PaymentRequired = {
@@ -41,7 +44,7 @@ export type PaymentRequired = {
   instructions: string[];
 };
 
-// ── Agent wallet — bypasses payment gate ──────────────────────
+// ── Agent wallet bypass ────────────────────────────────────────
 const AGENT_WALLET = (process.env.CIRCLE_AGENT_WALLET_ADDRESS || "").toLowerCase();
 
 function isAgentWallet(walletAddress: string): boolean {
@@ -56,17 +59,38 @@ export function updateSharedBlocks(blocks: any[]) {
 }
 
 // ── Contract risk score ───────────────────────────────────────
-function buildRiskScore(addr: string, blocks: any[]) {
+// Reads topFailingContracts which can be object {addr: count} or array [{address, failures}]
+function getContractFailures(block: any, addr: string): number {
   const lowerAddr = addr.toLowerCase();
-  const relevant  = blocks.filter(
-    (b) => b.topFailing?.[addr] || b.topFailing?.[lowerAddr]
-  );
-  const failureCount   = relevant.reduce(
-    (s, b) => s + (b.topFailing?.[addr] || b.topFailing?.[lowerAddr] || 0), 0
-  );
+
+  // Format 1: object map { "0xABC": 3 }
+  if (block.topFailingContracts && typeof block.topFailingContracts === "object" && !Array.isArray(block.topFailingContracts)) {
+    return block.topFailingContracts[addr] || block.topFailingContracts[lowerAddr] || 0;
+  }
+
+  // Format 2: array [{ address: "0xABC", failures: 3 }]
+  if (Array.isArray(block.topFailingContracts)) {
+    const match = block.topFailingContracts.find(
+      (c: any) => c.address?.toLowerCase() === lowerAddr
+    );
+    return match?.failures || 0;
+  }
+
+  // Format 3: topFailing map (dashboard format)
+  if (block.topFailing && typeof block.topFailing === "object") {
+    return block.topFailing[addr] || block.topFailing[lowerAddr] || 0;
+  }
+
+  return 0;
+}
+
+function buildRiskScore(addr: string, blocks: any[]) {
+  const lowerAddr    = addr.toLowerCase();
+  const relevant     = blocks.filter(b => getContractFailures(b, addr) > 0);
+  const failureCount = relevant.reduce((s, b) => s + getContractFailures(b, addr), 0);
   const blocksAppeared = relevant.length;
-  const totalTx        = relevant.reduce((s, b) => s + b.totalTx, 0);
-  const failureRate    = totalTx > 0 ? (failureCount / totalTx) * 100 : 0;
+  const totalTx      = relevant.reduce((s, b) => s + (b.totalTx || 0), 0);
+  const failureRate  = totalTx > 0 ? (failureCount / totalTx) * 100 : 0;
 
   const riskScore = Math.min(100, Math.round(
     failureCount * 5 + blocksAppeared * 3 + failureRate * 2
@@ -90,7 +114,10 @@ function buildRiskScore(addr: string, blocks: any[]) {
     riskLevel === "MEDIUM"   ? "Monitor closely — moderate failure activity observed." :
                                "Safe to transact — low failure risk detected.";
 
-  const blockNumbers = relevant.map((b) => b.blockNumber);
+  const blockNumbers = relevant.map(b => b.blockNumber);
+
+  console.log(`🔍 Contract ${addr.slice(0,8)}... — failures: ${failureCount}, blocks: ${blocksAppeared}, riskLevel: ${riskLevel}`);
+
   return {
     address:        addr,
     shortAddress:   `${addr.slice(0, 6)}...${addr.slice(-4)}`,
@@ -109,21 +136,34 @@ function buildRiskScore(addr: string, blocks: any[]) {
 // ── Network health snapshot ───────────────────────────────────
 function buildNetworkHealth(blocks: any[]) {
   const recent      = blocks.slice(-30);
-  const totalTx     = recent.reduce((s, b) => s + b.totalTx, 0);
-  const totalFailed = recent.reduce((s, b) => s + b.failedTx, 0);
+  const totalTx     = recent.reduce((s, b) => s + (b.totalTx || 0), 0);
+  const totalFailed = recent.reduce((s, b) => s + (b.failedTx || 0), 0);
   const avgFailRate = recent.length
-    ? recent.reduce((s, b) => s + b.failureRate, 0) / recent.length
+    ? recent.reduce((s, b) => s + (b.failureRate || 0), 0) / recent.length
     : 0;
 
   const healthScore = Math.max(0, Math.round(100 - avgFailRate * 400));
   const status      = healthScore >= 80 ? "HEALTHY" : healthScore >= 50 ? "DEGRADED" : "CRITICAL";
 
-  const topContracts: Record<string, number> = {};
-  for (const b of recent)
-    for (const [addr, count] of Object.entries(b.topFailing || {}))
-      topContracts[addr] = (topContracts[addr] || 0) + (count as number);
+  // Build top failing contracts — handles both array and object formats
+  const contractMap: Record<string, number> = {};
+  for (const b of recent) {
+    if (Array.isArray(b.topFailingContracts)) {
+      for (const c of b.topFailingContracts) {
+        contractMap[c.address] = (contractMap[c.address] || 0) + c.failures;
+      }
+    } else if (b.topFailingContracts && typeof b.topFailingContracts === "object") {
+      for (const [addr, count] of Object.entries(b.topFailingContracts)) {
+        contractMap[addr] = (contractMap[addr] || 0) + (count as number);
+      }
+    } else if (b.topFailing && typeof b.topFailing === "object") {
+      for (const [addr, count] of Object.entries(b.topFailing)) {
+        contractMap[addr] = (contractMap[addr] || 0) + (count as number);
+      }
+    }
+  }
 
-  const topFailing = Object.entries(topContracts)
+  const topFailing = Object.entries(contractMap)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
     .map(([addr, count]) => ({ address: addr, failures: count }));
@@ -149,7 +189,7 @@ async function handleQueryGate(
   intelligenceData: any
 ): Promise<IntelligenceResponse> {
 
-  // ── Agent bypass — never deducts queries or requires payment
+  // ── Agent bypass ──────────────────────────────────────────
   if (isAgentWallet(walletAddress)) {
     recordPaidQuery(walletAddress);
     return {
@@ -157,10 +197,7 @@ async function handleQueryGate(
       queryId,
       data: {
         ...intelligenceData,
-        meta: {
-          tier:    "AGENT",
-          message: "Agent access — paid via Circle USDC transfer",
-        },
+        meta: { tier: "AGENT", message: "Agent access — paid via Circle USDC transfer" },
       },
     };
   }
@@ -177,13 +214,32 @@ async function handleQueryGate(
         meta: {
           tier:             "FREE",
           queriesRemaining: stats.freeQueriesLeft,
+          paidCredits:      stats.paidCredits || 0,
           message:          `${stats.freeQueriesLeft} free queries remaining. After that, send 0.1 USDC to ${SERVICE_WALLET_ADDRESS} and confirm with your tx hash.`,
         },
       },
     };
   }
 
-  // ── Prepay — tell user exactly how to pay ─────────────────
+  // ── Paid credits — use if available ───────────────────────
+  if (hasPaidCredits(walletAddress)) {
+    deductPaidCredit(walletAddress);
+    const stats = getWalletStats(walletAddress);
+    return {
+      success: true,
+      queryId,
+      data: {
+        ...intelligenceData,
+        meta: {
+          tier:        "PAID",
+          paidCredits: stats.paidCredits || 0,
+          message:     `Paid credit used. ${stats.paidCredits} credits remaining.`,
+        },
+      },
+    };
+  }
+
+  // ── Prepay — no credits, request payment ──────────────────
   if (mode === "prepay") {
     return {
       success: false,
@@ -207,7 +263,7 @@ async function handleQueryGate(
     };
   }
 
-  // ── Postpay — give data first, collect payment after ──────
+  // ── Postpay ───────────────────────────────────────────────
   const pending = setPendingPayment(walletAddress, queryId, intelligenceData);
   return {
     success: true,
@@ -261,9 +317,25 @@ export async function queryBlockAnalysis(
   const queryId = crypto.randomUUID();
   setPreferredMode(walletAddress, mode);
 
-  const block = sharedBlocks.find((b) => b.blockNumber === blockNumber);
+  const block = sharedBlocks.find(b => b.blockNumber === blockNumber);
   if (!block) {
     return { success: false, queryId, error: `Block #${blockNumber} not found in current window` };
+  }
+
+  // Build top contracts handling both formats
+  let topContracts: any[] = [];
+  if (Array.isArray(block.topFailingContracts)) {
+    topContracts = block.topFailingContracts
+      .sort((a: any, b: any) => b.failures - a.failures)
+      .map((c: any) => ({ address: c.address, failures: c.failures }));
+  } else if (block.topFailingContracts && typeof block.topFailingContracts === "object") {
+    topContracts = Object.entries(block.topFailingContracts)
+      .sort((a: any, b: any) => b[1] - a[1])
+      .map(([addr, count]) => ({ address: addr, failures: count }));
+  } else if (block.topFailing) {
+    topContracts = Object.entries(block.topFailing)
+      .sort((a: any, b: any) => b[1] - a[1])
+      .map(([addr, count]) => ({ address: addr, failures: count }));
   }
 
   const data = {
@@ -272,9 +344,7 @@ export async function queryBlockAnalysis(
     failedTx:     block.failedTx,
     failureRate:  `${(block.failureRate * 100).toFixed(2)}%`,
     severity:     block.failureRate >= 0.15 ? "CRITICAL" : block.failureRate >= 0.10 ? "HIGH" : "LOW",
-    topContracts: Object.entries(block.topFailing || {})
-      .sort((a: any, b: any) => b[1] - a[1])
-      .map(([addr, count]) => ({ address: addr, failures: count })),
+    topContracts,
     timestamp:    new Date().toISOString(),
   };
 
@@ -282,51 +352,69 @@ export async function queryBlockAnalysis(
 }
 
 // ── Confirm payment — works for ANY Arc Testnet wallet ────────
+// On success: adds a paid credit so next query is served immediately
 export async function confirmPayment(
-  queryId:       string,
-  txHashOrId:    string,
+  queryId:    string,
+  txHashOrId: string,
   walletAddress: string
 ): Promise<IntelligenceResponse> {
 
-  // ── Try Blockscout verification first (any EVM wallet) ────
+  // ── Blockscout verification (any EVM wallet) ──────────────
   if (txHashOrId.startsWith("0x")) {
     const { confirmed } = await verifyExternalPayment(walletAddress);
+
     if (confirmed) {
-      recordPaidQuery(walletAddress);
+      // Add credit — next query will be served immediately
+      addPaidCredit(walletAddress);
       clearPendingPayment(walletAddress);
+
+      const stats = getWalletStats(walletAddress);
+
       return {
         success: true,
         queryId,
         data: {
-          message:     "Payment confirmed via Arc Explorer. Query unlocked.",
+          message:     `Payment confirmed. 1 credit added to your wallet. Your next query will be served immediately.`,
           txHash:      txHashOrId,
           explorerUrl: `https://testnet.arcscan.app/tx/${txHashOrId}`,
+          paidCredits: stats.paidCredits,
+          totalSpent:  `${stats.totalSpent} USDC`,
         },
       };
     }
+
     return {
       success: false,
       queryId,
-      error: "Payment not found on Arc Testnet. Make sure you sent 0.1 USDC to the service wallet and try again.",
+      error: "Payment not found on Arc Testnet. Make sure you sent 0.1 USDC to the service wallet and try again in a few seconds.",
     };
   }
 
-  // ── Fallback: Circle API verification (Circle wallets) ────
+  // ── Circle API verification fallback ─────────────────────
   const { confirmed } = await verifyPayment(txHashOrId);
+
   if (!confirmed) {
     return {
       success: false,
       queryId,
-      error: "Payment not confirmed. Try again in a few seconds.",
+      error: "Payment not confirmed yet. Try again in a few seconds.",
     };
   }
 
-  recordPaidQuery(walletAddress);
+  addPaidCredit(walletAddress);
   clearPendingPayment(walletAddress);
+
+  const stats = getWalletStats(walletAddress);
+
   return {
     success: true,
     queryId,
-    data: { message: "Payment confirmed. Query unlocked.", txId: txHashOrId },
+    data: {
+      message:     `Payment confirmed. 1 credit added to your wallet. Your next query will be served immediately.`,
+      txId:        txHashOrId,
+      paidCredits: stats.paidCredits,
+      totalSpent:  `${stats.totalSpent} USDC`,
+    },
   };
 }
 
@@ -343,6 +431,7 @@ export async function getUsageStats(
     data: {
       wallet:           walletAddress,
       freeQueriesLeft:  stats.freeQueriesLeft,
+      paidCredits:      stats.paidCredits || 0,
       totalQueries:     stats.totalQueries,
       totalSpent:       `${stats.totalSpent} USDC`,
       preferredMode:    stats.preferredMode,
@@ -353,6 +442,7 @@ export async function getUsageStats(
         `Send ${getQueryPrice()} USDC to: ${SERVICE_WALLET_ADDRESS}`,
         "Use any Arc Testnet EVM wallet",
         "Then call POST /api/intelligence/confirm/:queryId with your tx hash",
+        "1 credit added per payment — used automatically on next query",
       ],
     },
   };
