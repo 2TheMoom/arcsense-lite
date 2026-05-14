@@ -502,7 +502,7 @@ function ApiAccessModal({ onClose, isMobile }) {
     { method: "GET",  url: `${BASE}/api/intelligence/contract/0xCONTRACT?wallet=${W}`,           desc: "Contract risk score" },
     { method: "GET",  url: `${BASE}/api/intelligence/block/BLOCK_NUMBER?wallet=${W}`,            desc: "Block analysis" },
     { method: "GET",  url: `${BASE}/api/intelligence/usage?wallet=${W}`,                         desc: "Your usage stats" },
-    { method: "POST", url: `${BASE}/api/intelligence/confirm/QUERY_ID`,                          desc: "Confirm payment · Body: { wallet, txHash }" },
+    { method: "POST", url: `${BASE}/api/intelligence/confirm/QUERY_ID`,                          desc: "Confirm payment · Body: { wallet, txId }" },
   ];
 
   return (
@@ -583,7 +583,7 @@ function ApiAccessModal({ onClose, isMobile }) {
               { n: "1", text: `Send 0.1 USDC to the service wallet above on Arc` },
               { n: "2", text: `Copy your transaction hash (starts with 0x)` },
               { n: "3", text: `Call POST /api/intelligence/confirm/:queryId` },
-              { n: "4", text: `Body: { "wallet": "0xYOURS", "txHash": "0xTX_HASH" }` },
+              { n: "4", text: `Body: { "wallet": "0xYOURS", "txId": "0xTX_HASH" }` },
               { n: "5", text: `1 credit added — next query served immediately` },
             ].map(s => (
               <div key={s.n} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
