@@ -225,7 +225,6 @@ function StatsRow({ blocks, isMobile, meta, agentStatus }) {
   const alertsTriggered = meta.totalAlertsTriggered || 0;
   const agentRuns       = agentStatus?.totalCycles || 0;
   const usdcSpent       = agentStatus?.totalUsdcSpent || 0;
-
   const stats = [
     { label: "BLOCKS SCANNED",     value: blocksScanned.toLocaleString(),  sub: "processed",   size: 24, accent: C.navy,    color: C.charcoal },
     { label: "TOTAL TRANSACTIONS", value: total.toLocaleString(),           sub: "on-chain",    size: 24, accent: C.navy,    color: C.charcoal },
@@ -235,7 +234,6 @@ function StatsRow({ blocks, isMobile, meta, agentStatus }) {
     { label: "AGENT CYCLES",       value: agentRuns.toLocaleString(),       sub: "autonomous",  size: agentRuns > 0 ? 26 : 24, accent: C.green, color: agentRuns > 0 ? C.green : C.charcoal, bg: agentRuns > 0 ? C.greenG : "transparent" },
     { label: "USDC SPENT",         value: `$${usdcSpent.toFixed(2)}`,       sub: "by agent",    size: usdcSpent > 0 ? 26 : 24, accent: usdcSpent > 0 ? C.green : C.navy, color: usdcSpent > 0 ? C.green : C.charcoal, bg: usdcSpent > 0 ? C.greenG : "transparent", spanFull: true },
   ];
-
   return (
     <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(7,1fr)", gap: isMobile ? 8 : 10, flexShrink: 0 }}>
       {stats.map((s, i) => (
@@ -254,7 +252,6 @@ function BlockFeed({ blocks, isMobile, selectedContract }) {
   const ref      = useRef(null);
   const filtered = selectedContract ? blocks.filter(b => b.topFailing?.[selectedContract]) : blocks;
   useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight; }, [filtered]);
-
   return (
     <HudPanel label={selectedContract ? `FILTERED · ${shortAddr(selectedContract)}` : "BLOCK FEED"} accent={selectedContract ? C.crimson : C.navy} style={{ display: "flex", flexDirection: "column", overflow: "hidden", height: isMobile ? 300 : "100%", minHeight: 0 }}>
       <div style={{ padding: "12px 16px 10px", borderBottom: `1px solid ${C.borderL}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
@@ -309,7 +306,6 @@ function FailureChart({ chartData, isMobile, selectedContract }) {
     else if (d.rate < 10 && inSpike) { inSpike = false; spikeRanges.push({ x1: spikeStart, x2: chartData[i - 1]?.block }); }
   });
   if (inSpike && spikeStart) spikeRanges.push({ x1: spikeStart, x2: chartData[chartData.length - 1]?.block });
-
   return (
     <HudPanel label={selectedContract ? `CONTRACT FAILURES · ${shortAddr(selectedContract)}` : "FAILURE RATE · LAST 30 BLOCKS"} accent={selectedContract ? C.crimson : C.navy} style={{ display: "flex", flexDirection: "column", height: isMobile ? "auto" : "100%", overflow: "hidden", minHeight: 0 }}>
       <div style={{ height: isMobile ? 200 : "100%", padding: "16px 8px 0 0", minHeight: 0, flexShrink: isMobile ? 0 : 1, flex: isMobile ? "none" : 1 }}>
@@ -350,7 +346,6 @@ function ContractsPanel({ blocks, isMobile, selectedContract, onSelectContract }
   const contractHistory = buildContractHistory(blocks);
   const sorted = Object.entries(contractHistory).sort((a, b) => b[1].total - a[1].total).slice(0, 8);
   const max    = sorted[0]?.[1]?.total || 1;
-
   return (
     <HudPanel label="CONTRACT INTELLIGENCE" style={{ display: "flex", flexDirection: "column", height: isMobile ? "auto" : "100%", overflow: "hidden", minHeight: 0 }}>
       <div style={{ padding: "12px 18px 10px", borderBottom: `1px solid ${C.borderL}`, display: "flex", justifyContent: "space-between", flexShrink: 0 }}>
@@ -409,7 +404,6 @@ function AgentPanel({ agentStatus, agentLog, isMobile, onTrigger, triggering }) 
   const status      = triggering ? "RUNNING" : (agentStatus?.status || "IDLE");
   const statusColor = status === "RUNNING" ? C.green : status === "ERROR" ? C.crimson : C.muted;
   const displayLog  = isMobile ? (agentLog || []).slice(0, 5) : (agentLog || []).slice(0, 10);
-
   return (
     <HudPanel label="AGENT INTELLIGENCE" accent={C.green} style={{ display: "flex", flexDirection: "column", height: isMobile ? "auto" : "100%", overflow: "hidden", minHeight: 0 }}>
       <div style={{ padding: "12px 14px 10px", borderBottom: `1px solid ${C.borderL}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
@@ -483,7 +477,8 @@ function AgentPanel({ agentStatus, agentLog, isMobile, onTrigger, triggering }) 
 
 // ── API Access modal ──────────────────────────────────────────
 function ApiAccessModal({ onClose, isMobile }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied]       = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState(null);
 
   const copyWallet = () => {
     navigator.clipboard.writeText(SERVICE_WALLET).then(() => {
@@ -492,26 +487,34 @@ function ApiAccessModal({ onClose, isMobile }) {
     });
   };
 
+  const copyUrl = (url) => {
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedUrl(url);
+      setTimeout(() => setCopiedUrl(null), 2000);
+    });
+  };
+
+  const BASE = API;
+  const W    = "YOUR_WALLET_ADDRESS";
+
   const endpoints = [
-    { method: "GET", path: "/api/intelligence/network",             desc: "Network health snapshot" },
-    { method: "GET", path: "/api/intelligence/contract/:address",   desc: "Contract risk score" },
-    { method: "GET", path: "/api/intelligence/block/:number",       desc: "Block analysis" },
-    { method: "GET", path: "/api/intelligence/usage",               desc: "Your usage stats" },
-    { method: "POST", path: "/api/intelligence/confirm/:queryId",   desc: "Confirm payment" },
+    { method: "GET",  url: `${BASE}/api/intelligence/network?wallet=${W}&mode=prepay`,           desc: "Network health snapshot" },
+    { method: "GET",  url: `${BASE}/api/intelligence/contract/0xCONTRACT?wallet=${W}`,           desc: "Contract risk score" },
+    { method: "GET",  url: `${BASE}/api/intelligence/block/BLOCK_NUMBER?wallet=${W}`,            desc: "Block analysis" },
+    { method: "GET",  url: `${BASE}/api/intelligence/usage?wallet=${W}`,                         desc: "Your usage stats" },
+    { method: "POST", url: `${BASE}/api/intelligence/confirm/QUERY_ID`,                          desc: "Confirm payment · Body: { wallet, txHash }" },
   ];
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: isMobile ? "flex-end" : "center", justifyContent: "center", background: "rgba(22,23,25,0.6)", backdropFilter: "blur(4px)", animation: "fadeIn 0.2s ease" }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div style={{ background: C.panel, border: `1px solid ${C.border}`, width: isMobile ? "100%" : 560, maxHeight: isMobile ? "90dvh" : "85vh", overflowY: "auto", position: "relative", animation: isMobile ? "slideUp 0.3s ease" : "fadeIn 0.2s ease" }}>
+      <div style={{ background: C.panel, border: `1px solid ${C.border}`, width: isMobile ? "100%" : 600, maxHeight: isMobile ? "90dvh" : "85vh", overflowY: "auto", position: "relative", animation: isMobile ? "slideUp 0.3s ease" : "fadeIn 0.2s ease" }}>
         <Corners color={C.navy} size={16} />
-
-        {/* Header */}
         <div style={{ padding: "16px 20px", borderBottom: `1px solid ${C.borderL}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: 16, letterSpacing: 4, color: C.charcoal }}>API ACCESS</div>
-            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL, marginTop: 2 }}>pay-per-query intelligence on Arc Testnet</div>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL, marginTop: 2 }}>pay-per-query intelligence on Arc</div>
           </div>
           <button onClick={onClose} style={{ background: "none", border: `1px solid ${C.borderL}`, color: C.muted, cursor: "pointer", fontSize: 12, padding: "3px 9px", fontFamily: "'Barlow Condensed', sans-serif" }}>✕</button>
         </div>
@@ -519,9 +522,9 @@ function ApiAccessModal({ onClose, isMobile }) {
         {/* Pricing */}
         <div style={{ padding: "14px 20px", borderBottom: `1px solid ${C.borderL}`, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
           {[
-            { label: "FREE TIER",     value: "5 queries",  sub: "per wallet", color: C.green  },
-            { label: "PRICE / QUERY", value: "0.1 USDC",   sub: "after free tier", color: C.navy   },
-            { label: "NETWORK",       value: "Arc Testnet", sub: "EVM compatible",  color: C.charcoal },
+            { label: "FREE TIER",     value: "5 queries",   sub: "per wallet",      color: C.green    },
+            { label: "PRICE / QUERY", value: "0.1 USDC",    sub: "after free tier", color: C.navy     },
+            { label: "NETWORK",       value: "Arc",          sub: "EVM compatible",  color: C.charcoal },
           ].map(s => (
             <div key={s.label} style={{ background: C.bg, border: `1px solid ${C.borderL}`, padding: "10px 12px" }}>
               <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 2, color: C.mutedL }}>{s.label}</div>
@@ -541,26 +544,34 @@ function ApiAccessModal({ onClose, isMobile }) {
             </button>
           </div>
           <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL, marginTop: 6 }}>
-            Send USDC to this address on Arc Testnet using any EVM wallet
+            Send USDC to this address on Arc using any EVM wallet
           </div>
         </div>
 
-        {/* Endpoints */}
+        {/* Endpoints with full URLs */}
         <div style={{ padding: "14px 20px", borderBottom: `1px solid ${C.borderL}` }}>
-          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL, marginBottom: 8 }}>AVAILABLE ENDPOINTS</div>
+          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL, marginBottom: 8 }}>ENDPOINTS</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {endpoints.map(e => (
-              <div key={e.path} style={{ display: "flex", alignItems: "flex-start", gap: 8, background: C.bg, border: `1px solid ${C.borderL}`, padding: "8px 12px" }}>
-                <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, fontWeight: 700, letterSpacing: 1, color: e.method === "POST" ? C.amber : C.green, flexShrink: 0, marginTop: 1 }}>{e.method}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: C.navy, wordBreak: "break-all" }}>{e.path}</div>
-                  <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, color: C.mutedL, marginTop: 2 }}>{e.desc}</div>
+            {endpoints.map((e, i) => (
+              <div key={i} style={{ background: C.bg, border: `1px solid ${C.borderL}`, padding: "8px 12px" }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 4 }}>
+                  <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, fontWeight: 700, letterSpacing: 1, color: e.method === "POST" ? C.amber : C.green, flexShrink: 0, marginTop: 1 }}>{e.method}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.navy, wordBreak: "break-all", lineHeight: 1.5 }}>{e.url}</div>
+                    <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, color: C.mutedL, marginTop: 2 }}>{e.desc}</div>
+                  </div>
+                  <button
+                    onClick={() => copyUrl(e.url)}
+                    style={{ background: copiedUrl === e.url ? C.green : "none", border: `1px solid ${copiedUrl === e.url ? C.green : C.borderL}`, color: copiedUrl === e.url ? C.white : C.muted, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 1, padding: "3px 8px", flexShrink: 0, transition: "all 0.2s" }}
+                  >
+                    {copiedUrl === e.url ? "✓" : "COPY"}
+                  </button>
                 </div>
               </div>
             ))}
           </div>
           <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL, marginTop: 8 }}>
-            Add <span style={{ color: C.navy }}>?wallet=0xYOUR_ADDRESS&mode=prepay</span> to all GET requests
+            Replace <span style={{ color: C.navy }}>YOUR_WALLET_ADDRESS</span> with your actual wallet address
           </div>
         </div>
 
@@ -569,11 +580,11 @@ function ApiAccessModal({ onClose, isMobile }) {
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL, marginBottom: 8 }}>HOW TO PAY</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {[
-              { n: "1", text: `Send 0.1 USDC to the service wallet above on Arc Testnet` },
+              { n: "1", text: `Send 0.1 USDC to the service wallet above on Arc` },
               { n: "2", text: `Copy your transaction hash (starts with 0x)` },
               { n: "3", text: `Call POST /api/intelligence/confirm/:queryId` },
               { n: "4", text: `Body: { "wallet": "0xYOURS", "txHash": "0xTX_HASH" }` },
-              { n: "5", text: `Intelligence data returned immediately` },
+              { n: "5", text: `1 credit added — next query served immediately` },
             ].map(s => (
               <div key={s.n} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
                 <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 10, fontWeight: 700, color: C.white, background: C.navy, padding: "1px 7px", flexShrink: 0 }}>{s.n}</span>
@@ -588,17 +599,255 @@ function ApiAccessModal({ onClose, isMobile }) {
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL, marginBottom: 8 }}>SELECTIVE QUERIES</div>
           <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.text, lineHeight: 2, background: C.bg, border: `1px solid ${C.borderL}`, padding: "10px 12px" }}>
             <div style={{ color: C.mutedL }}># Contract risk only</div>
-            <div style={{ color: C.navy }}>GET /api/intelligence/contract/0xABC?wallet=0xYOURS</div>
+            <div style={{ color: C.navy, wordBreak: "break-all" }}>{BASE}/api/intelligence/contract/0xABC?wallet=YOUR_WALLET_ADDRESS</div>
             <div style={{ color: C.mutedL, marginTop: 6 }}># Network health only</div>
-            <div style={{ color: C.navy }}>GET /api/intelligence/network?wallet=0xYOURS</div>
+            <div style={{ color: C.navy, wordBreak: "break-all" }}>{BASE}/api/intelligence/network?wallet=YOUR_WALLET_ADDRESS</div>
             <div style={{ color: C.mutedL, marginTop: 6 }}># Specific block only</div>
-            <div style={{ color: C.navy }}>GET /api/intelligence/block/41234567?wallet=0xYOURS</div>
+            <div style={{ color: C.navy, wordBreak: "break-all" }}>{BASE}/api/intelligence/block/BLOCK_NUMBER?wallet=YOUR_WALLET_ADDRESS</div>
           </div>
           <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL, marginTop: 8 }}>
             Each endpoint is independently gated. Pay only for what you query.
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── LANDING PAGE ──────────────────────────────────────────────
+function LandingPage({ onLaunch }) {
+  const [liveStats, setLiveStats]       = useState(null);
+  const [agentStats, setAgentStats]     = useState(null);
+  const [launching, setLaunching]       = useState(false);
+  const isMobile                        = useIsMobile();
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const [reportsRes, agentRes] = await Promise.all([
+          fetch(`${API}/reports`),
+          fetch(`${API}/agent/status`),
+        ]);
+        const reports = await reportsRes.json();
+        const agent   = await agentRes.json();
+        setLiveStats(reports.meta || {});
+        setAgentStats(agent);
+      } catch (err) {
+        console.error("Failed to fetch landing stats:", err);
+      }
+    };
+    fetchStats();
+    const iv = setInterval(fetchStats, 10000);
+    return () => clearInterval(iv);
+  }, []);
+
+  const handleLaunch = () => {
+    setLaunching(true);
+    setTimeout(() => onLaunch(), 600);
+  };
+
+  const features = [
+    {
+      icon: "⛓️",
+      title: "Live Block Intelligence",
+      desc: "Scans every Arc block in real time. Detects failed transactions, identifies problematic contracts, and classifies failure behavior across the network.",
+      color: C.navy,
+      bg: C.navyG,
+    },
+    {
+      icon: "💳",
+      title: "Pay-Per-Query API",
+      desc: "5 free queries per wallet. Then 0.1 USDC per query — paid from any EVM wallet. Verified on-chain via Arc Explorer. No Circle account required.",
+      color: C.green,
+      bg: C.greenG,
+    },
+    {
+      icon: "⚡",
+      title: "Autonomous Agent",
+      desc: "An on-chain agent that monitors Arc every 5 minutes, makes autonomous decisions, and pays for intelligence using USDC from its own Circle wallet.",
+      color: C.amber,
+      bg: C.amberG,
+    },
+  ];
+
+  const steps = [
+    { n: "01", title: "Query the API", desc: "Send a request with your wallet address. First 5 queries are free." },
+    { n: "02", title: "Pay in USDC",   desc: "After free tier, send 0.1 USDC to the service wallet from any EVM wallet on Arc." },
+    { n: "03", title: "Get Intelligence", desc: "Payment verified on-chain via Blockscout. Intelligence returned immediately." },
+  ];
+
+  return (
+    <div style={{
+      background: C.bg,
+      minHeight: "100dvh",
+      display: "flex",
+      flexDirection: "column",
+      opacity: launching ? 0 : 1,
+      transition: "opacity 0.6s ease",
+      overflow: "auto",
+    }}>
+
+      {/* ── NAV ── */}
+      <div style={{ background: C.panel, borderBottom: `1px solid ${C.border}`, padding: isMobile ? "0 20px" : "0 48px", height: 62, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, position: "sticky", top: 0, zIndex: 50 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <ArcSenseLogo size={32} />
+          <div>
+            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: 18, letterSpacing: 4, color: C.charcoal, lineHeight: 1 }}>ARCSENSE</div>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 6, letterSpacing: 2, color: C.mutedL }}>INTELLIGENCE · ARC</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <a href="https://github.com/2TheMoom/arcsense-lite" target="_blank" rel="noopener noreferrer"
+            style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 10, letterSpacing: 2, color: C.muted, textDecoration: "none", padding: "6px 12px", border: `1px solid ${C.border}`, display: isMobile ? "none" : "block" }}
+          >GITHUB</a>
+          <button onClick={handleLaunch} style={{ background: C.navy, border: "none", color: C.white, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 11, letterSpacing: 3, fontWeight: 700, padding: isMobile ? "8px 16px" : "8px 22px", transition: "all 0.2s" }}
+            onMouseEnter={e => e.currentTarget.style.background = C.navyL}
+            onMouseLeave={e => e.currentTarget.style.background = C.navy}
+          >
+            LAUNCH DASHBOARD →
+          </button>
+        </div>
+      </div>
+
+      {/* ── HERO ── */}
+      <div style={{ padding: isMobile ? "60px 24px 40px" : "100px 48px 60px", textAlign: "center", maxWidth: 860, margin: "0 auto", width: "100%" }}>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: C.panel, border: `1px solid ${C.border}`, padding: "5px 14px", marginBottom: 28 }}>
+          <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.green, animation: "blink 1.8s ease-in-out infinite" }} />
+          <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9, letterSpacing: 3, color: C.green, fontWeight: 700 }}>LIVE ON ARC</span>
+        </div>
+
+        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: isMobile ? 40 : 68, letterSpacing: isMobile ? 2 : 4, color: C.charcoal, lineHeight: 1, marginBottom: 20 }}>
+          Real-time intelligence<br />
+          <span style={{ color: C.navy }}>infrastructure for Arc</span>
+        </div>
+
+        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: isMobile ? 11 : 13, color: C.muted, lineHeight: 1.9, maxWidth: 620, margin: "0 auto 36px", letterSpacing: 0.3 }}>
+          ArcSense scans every Arc block live, surfaces failing contracts, and exposes gated intelligence through a pay-per-query API — consumed by developers, wallets, and autonomous agents.
+        </div>
+
+        <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+          <button onClick={handleLaunch} style={{ background: C.navy, border: "none", color: C.white, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 13, letterSpacing: 3, fontWeight: 700, padding: "14px 32px", transition: "all 0.2s" }}
+            onMouseEnter={e => e.currentTarget.style.background = C.navyL}
+            onMouseLeave={e => e.currentTarget.style.background = C.navy}
+          >
+            ▶ LAUNCH DASHBOARD
+          </button>
+          <a href="https://github.com/2TheMoom/arcsense-lite" target="_blank" rel="noopener noreferrer"
+            style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 13, letterSpacing: 3, fontWeight: 700, padding: "14px 32px", textDecoration: "none", display: "inline-block", transition: "all 0.2s" }}
+          >
+            VIEW GITHUB
+          </a>
+        </div>
+      </div>
+
+      {/* ── LIVE STATS BAR ── */}
+      <div style={{ background: C.panel, borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, padding: isMobile ? "20px 24px" : "20px 48px" }}>
+        <div style={{ maxWidth: 960, margin: "0 auto", display: "grid", gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(4,1fr)", gap: isMobile ? 16 : 0 }}>
+          {[
+            { label: "BLOCKS SCANNED",  value: liveStats?.totalBlocksScanned ? liveStats.totalBlocksScanned.toLocaleString() : "—", color: C.navy },
+            { label: "ALERTS TRIGGERED", value: liveStats?.totalAlertsTriggered ? liveStats.totalAlertsTriggered.toLocaleString() : "—", color: C.crimson },
+            { label: "AGENT CYCLES",    value: agentStats?.totalCycles ? agentStats.totalCycles.toLocaleString() : "—", color: C.green },
+            { label: "USDC SPENT",      value: agentStats?.totalUsdcSpent ? `$${agentStats.totalUsdcSpent.toFixed(2)}` : "—", color: C.green },
+          ].map((s, i) => (
+            <div key={s.label} style={{ textAlign: "center", borderRight: !isMobile && i < 3 ? `1px solid ${C.border}` : "none", padding: "0 24px" }}>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: 32, color: s.color, lineHeight: 1 }}>{s.value}</div>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL, marginTop: 4 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── FEATURES ── */}
+      <div style={{ padding: isMobile ? "48px 24px" : "72px 48px", maxWidth: 960, margin: "0 auto", width: "100%" }}>
+        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 4, color: C.mutedL, textAlign: "center", marginBottom: 8 }}>WHAT ARCSENSE DOES</div>
+        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: isMobile ? 28 : 36, letterSpacing: 2, color: C.charcoal, textAlign: "center", marginBottom: 40 }}>
+          Everything you need for Arc intelligence
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3,1fr)", gap: 16 }}>
+          {features.map(f => (
+            <div key={f.title} style={{ background: C.panel, border: `1px solid ${C.border}`, padding: "28px 24px", position: "relative" }}>
+              <Corners color={f.color} size={12} />
+              <div style={{ fontSize: 28, marginBottom: 14 }}>{f.icon}</div>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 16, letterSpacing: 2, color: C.charcoal, marginBottom: 10 }}>{f.title}</div>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: C.muted, lineHeight: 1.9 }}>{f.desc}</div>
+              <div style={{ position: "absolute", top: 20, right: 20, background: f.bg, border: `1px solid ${f.color}44`, padding: "2px 8px" }}>
+                <div style={{ width: 4, height: 4, borderRadius: "50%", background: f.color, animation: "blink 2s ease-in-out infinite", display: "inline-block", marginRight: 4, verticalAlign: "middle" }} />
+                <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 2, color: f.color, fontWeight: 700, verticalAlign: "middle" }}>LIVE</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── HOW IT WORKS ── */}
+      <div style={{ background: C.panel, borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, padding: isMobile ? "48px 24px" : "72px 48px" }}>
+        <div style={{ maxWidth: 960, margin: "0 auto" }}>
+          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 4, color: C.mutedL, textAlign: "center", marginBottom: 8 }}>HOW IT WORKS</div>
+          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: isMobile ? 28 : 36, letterSpacing: 2, color: C.charcoal, textAlign: "center", marginBottom: 48 }}>
+            Three steps to intelligence
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3,1fr)", gap: 24 }}>
+            {steps.map((s, i) => (
+              <div key={s.n} style={{ textAlign: "center" }}>
+                <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: 48, color: C.border, lineHeight: 1, marginBottom: 12 }}>{s.n}</div>
+                <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 16, letterSpacing: 2, color: C.charcoal, marginBottom: 10 }}>{s.title}</div>
+                <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: C.muted, lineHeight: 1.9 }}>{s.desc}</div>
+                {i < steps.length - 1 && !isMobile && (
+                  <div style={{ position: "absolute" }} />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── BUILT WITH ── */}
+      <div style={{ padding: isMobile ? "40px 24px" : "60px 48px", maxWidth: 960, margin: "0 auto", width: "100%", textAlign: "center" }}>
+        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 4, color: C.mutedL, marginBottom: 24 }}>BUILT WITH</div>
+        <div style={{ display: "flex", gap: 24, justifyContent: "center", alignItems: "center", flexWrap: "wrap" }}>
+          {[
+            { label: "Arc Network",   sub: "Layer 1 blockchain" },
+            { label: "Circle USDC",   sub: "Programmable payments" },
+            { label: "Blockscout",    sub: "On-chain verification" },
+            { label: "Railway",       sub: "Engine hosting" },
+          ].map(b => (
+            <div key={b.label} style={{ background: C.panel, border: `1px solid ${C.border}`, padding: "12px 20px", textAlign: "center" }}>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 14, letterSpacing: 2, color: C.charcoal }}>{b.label}</div>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: C.mutedL, marginTop: 2 }}>{b.sub}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── CTA BANNER ── */}
+      <div style={{ background: C.navy, padding: isMobile ? "40px 24px" : "60px 48px", textAlign: "center" }}>
+        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: isMobile ? 28 : 40, letterSpacing: 3, color: C.white, marginBottom: 12 }}>
+          Start exploring Arc intelligence
+        </div>
+        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "rgba(240,237,231,0.6)", marginBottom: 28 }}>
+          Live on Arc · 5 free queries per wallet
+        </div>
+        <button onClick={handleLaunch} style={{ background: C.white, border: "none", color: C.navy, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 13, letterSpacing: 3, fontWeight: 900, padding: "14px 36px", transition: "all 0.2s" }}
+          onMouseEnter={e => { e.currentTarget.style.background = C.bg; }}
+          onMouseLeave={e => { e.currentTarget.style.background = C.white; }}
+        >
+          ▶ LAUNCH DASHBOARD
+        </button>
+      </div>
+
+      {/* ── FOOTER ── */}
+      <div style={{ borderTop: `1px solid ${C.border}`, padding: isMobile ? "18px 24px" : "18px 48px", display: "flex", flexDirection: isMobile ? "column" : "row", justifyContent: "space-between", alignItems: "center", gap: 10, background: C.panel, textAlign: isMobile ? "center" : "left" }}>
+        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 12, color: C.muted }}>
+          Built by{" "}<a href="https://x.com/olumi441" target="_blank" rel="noopener noreferrer" style={{ color: C.navy, fontWeight: 700, textDecoration: "none" }}>Abu Olumi</a>
+        </span>
+        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 12, color: C.muted }}>
+          Powered by{" "}<a href="https://x.com/arc" target="_blank" rel="noopener noreferrer" style={{ color: C.navy, fontWeight: 700, textDecoration: "none" }}>Arc</a>
+        </span>
+        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 10, letterSpacing: 2, color: C.mutedL }}>
+          Arc Hackathon 2026 · Track 4
+        </span>
+      </div>
+
     </div>
   );
 }
@@ -623,7 +872,6 @@ function TopBar({ trend, severity, insight, latestBlock, isMobile, onApiAccess }
   const sevColor   = severity === "HIGH" ? C.crimson : severity === "MEDIUM" ? C.amber : C.navy;
   const sevBg      = severity === "HIGH" ? C.crimsonG : severity === "MEDIUM" ? C.amberG : C.navyG;
   const trendColor = trend.includes("RISING") ? C.crimson : trend.includes("DROP") ? C.navyL : C.muted;
-
   if (isMobile) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", height: 54, borderBottom: `1px solid ${C.border}`, background: C.panel, flexShrink: 0 }}>
@@ -648,7 +896,6 @@ function TopBar({ trend, severity, insight, latestBlock, isMobile, onApiAccess }
       </div>
     );
   }
-
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 32px", height: 62, borderBottom: `1px solid ${C.border}`, background: C.panel, flexShrink: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -671,7 +918,6 @@ function TopBar({ trend, severity, insight, latestBlock, isMobile, onApiAccess }
         ))}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        {/* API Access button */}
         <button onClick={onApiAccess} style={{ background: C.navyG, border: `1px solid ${C.navy}44`, color: C.navy, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9, letterSpacing: 3, fontWeight: 700, padding: "6px 14px", transition: "all 0.2s" }}
           onMouseEnter={e => { e.currentTarget.style.background = C.navy; e.currentTarget.style.color = C.white; }}
           onMouseLeave={e => { e.currentTarget.style.background = C.navyG; e.currentTarget.style.color = C.navy; }}
@@ -729,13 +975,14 @@ function Footer({ isMobile }) {
       <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 13, letterSpacing: 1, color: C.muted }}>
         Built by{" "}<a href="https://x.com/olumi441" target="_blank" rel="noopener noreferrer" style={{ color: C.navy, fontWeight: 700, textDecoration: "none", fontSize: 14 }}>Abu Olumi</a>
       </span>
-      {!isMobile && <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 11, letterSpacing: 2, color: C.mutedL }}>Real-time signal intelligence for Arc Testnet</span>}
+      {!isMobile && <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 11, letterSpacing: 2, color: C.mutedL }}>Real-time signal intelligence for Arc</span>}
     </div>
   );
 }
 
 // ── Main ──────────────────────────────────────────────────────
 export default function ArcSenseDashboard() {
+  const [showLanding, setShowLanding]   = useState(true);
   const [blocks, setBlocks]             = useState([]);
   const [alert, setAlert]               = useState(null);
   const [meta, setMeta]                 = useState({ totalBlocksScanned: 0, totalAlertsTriggered: 0 });
@@ -840,6 +1087,28 @@ export default function ArcSenseDashboard() {
   const selectedData    = selectedContract ? contractHistory[selectedContract] : null;
   const selectedClass   = selectedData ? classifyContract(selectedContract, selectedData.total, selectedData.blocks.length, blocks.length, selectedData.firstIdx, selectedData.lastIdx) : null;
 
+  // ── Show landing page ──────────────────────────────────────
+  if (showLanding) {
+    return (
+      <>
+        <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          html, body, #root { height: 100%; }
+          body { overflow-x: hidden; }
+          ::-webkit-scrollbar { width: 3px; }
+          ::-webkit-scrollbar-track { background: ${C.bgDeep}; }
+          ::-webkit-scrollbar-thumb { background: ${C.border}; }
+          @keyframes blink  { 0%,100%{opacity:1} 50%{opacity:0.25} }
+          @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+          @keyframes pulse  { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        `}</style>
+        <LandingPage onLaunch={() => setShowLanding(false)} />
+      </>
+    );
+  }
+
+  // ── Show dashboard ─────────────────────────────────────────
   return (
     <>
       <style>{`
