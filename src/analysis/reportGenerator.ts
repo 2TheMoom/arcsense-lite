@@ -7,39 +7,39 @@ import {
 
 // ── Types ─────────────────────────────────────────────────────
 type BlockReport = {
-  blockNumber: number;
-  totalTx: number;
-  failedTx: number;
-  failureRate: number;
+  blockNumber:         number;
+  totalTx:             number;
+  failedTx:            number;
+  failureRate:         number;
   topFailingContracts: Record<string, number>;
 };
 
 type WeeklySnapshot = {
-  blockNumber: number;
-  totalTx: number;
-  failedTx: number;
-  failureRate: number;
+  blockNumber:         number;
+  totalTx:             number;
+  failedTx:            number;
+  failureRate:         number;
   topFailingContracts: Record<string, number>;
-  timestamp: number;
+  timestamp:           number;
 };
 
 // ── Weekly accumulator ────────────────────────────────────────
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-const REPORTS_DIR = path.join(process.cwd(), "reports");
+const WEEK_MS      = 7 * 24 * 60 * 60 * 1000;
+const REPORTS_DIR  = path.join(process.cwd(), "reports");
 const WEEKLY_STORE = path.join(REPORTS_DIR, "weekly-store.json");
 
 let weeklySnapshots: WeeklySnapshot[] = [];
-let weeklyStartTime: number = Date.now();
+let weeklyStartTime: number           = Date.now();
 
 // Load existing snapshots from disk on startup
 function loadWeeklyStore() {
   try {
     if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR, { recursive: true });
     if (fs.existsSync(WEEKLY_STORE)) {
-      const raw = fs.readFileSync(WEEKLY_STORE, "utf-8");
+      const raw    = fs.readFileSync(WEEKLY_STORE, "utf-8");
       const parsed = JSON.parse(raw);
       weeklySnapshots = parsed.snapshots || [];
-      weeklyStartTime = parsed.startTime || Date.now();
+      weeklyStartTime = parsed.startTime  || Date.now();
       console.log(`📂 Loaded ${weeklySnapshots.length} snapshots from weekly store`);
     }
   } catch {
@@ -68,14 +68,20 @@ function generateWeeklyReport() {
     return;
   }
 
-  const now = new Date();
+  const now       = new Date();
   const startDate = new Date(weeklyStartTime);
 
   const totalBlocks    = weeklySnapshots.length;
   const totalTx        = weeklySnapshots.reduce((s, b) => s + b.totalTx, 0);
   const totalFailed    = weeklySnapshots.reduce((s, b) => s + b.failedTx, 0);
   const avgFailureRate = weeklySnapshots.reduce((s, b) => s + b.failureRate, 0) / totalBlocks;
-  const maxFailureRate = Math.max(...weeklySnapshots.map(b => b.failureRate));
+
+  // ── FIXED: use reduce instead of Math.max spread ──────────
+  // Math.max(...largeArray) crashes the call stack when array has thousands of entries
+  const maxFailureRate = weeklySnapshots.reduce(
+    (max, b) => b.failureRate > max ? b.failureRate : max, 0
+  );
+
   const alertBlocks    = weeklySnapshots.filter(b => b.failureRate >= 0.10).length;
   const criticalBlocks = weeklySnapshots.filter(b => b.failureRate >= 0.15).length;
 
@@ -90,13 +96,15 @@ function generateWeeklyReport() {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
 
-  // Most volatile block
+  // Most volatile block — use reduce instead of spread
   const worstBlock = weeklySnapshots.reduce((prev, curr) =>
     curr.failureRate > prev.failureRate ? curr : prev
   );
 
   // Health score (0-100, higher = healthier)
-  const healthScore = Math.max(0, Math.round(100 - (avgFailureRate * 400) - (criticalBlocks / totalBlocks * 100)));
+  const healthScore = Math.max(0, Math.round(
+    100 - (avgFailureRate * 400) - (criticalBlocks / totalBlocks * 100)
+  ));
 
   const divider = "=".repeat(62);
   const line    = "-".repeat(62);
@@ -159,12 +167,12 @@ function generateWeeklyReport() {
     // Also save JSON version for dashboard use later
     const jsonName = fileName.replace(".txt", ".json");
     fs.writeFileSync(path.join(REPORTS_DIR, jsonName), JSON.stringify({
-      period: { start: weeklyStartTime, end: Date.now() },
-      totalBlocks, totalTx, totalFailed,
-      avgFailureRate, maxFailureRate,
-      alertBlocks, criticalBlocks, healthScore,
-      topContracts: Object.fromEntries(topContracts),
-      worstBlock: { blockNumber: worstBlock.blockNumber, failureRate: worstBlock.failureRate },
+      period:          { start: weeklyStartTime, end: Date.now() },
+      totalBlocks,     totalTx,          totalFailed,
+      avgFailureRate,  maxFailureRate,
+      alertBlocks,     criticalBlocks,   healthScore,
+      topContracts:    Object.fromEntries(topContracts),
+      worstBlock:      { blockNumber: worstBlock.blockNumber, failureRate: worstBlock.failureRate },
     }, null, 2));
     console.log(`💾  JSON report saved  → reports/${jsonName}`);
   } catch (err) {
@@ -172,13 +180,13 @@ function generateWeeklyReport() {
   }
 
   // Reset for next week
-  weeklySnapshots  = [];
-  weeklyStartTime  = Date.now();
+  weeklySnapshots = [];
+  weeklyStartTime = Date.now();
   saveWeeklyStore();
 }
 
 function generateInsight(
-  avgRate: number,
+  avgRate:      number,
   criticalBlocks: number,
   topContracts: [string, number][]
 ): string {
@@ -215,12 +223,12 @@ export function pushBlockReport(report: BlockReport) {
 
   // Accumulate into weekly store
   weeklySnapshots.push({
-    blockNumber:          report.blockNumber,
-    totalTx:              report.totalTx,
-    failedTx:             report.failedTx,
-    failureRate:          report.failureRate,
-    topFailingContracts:  report.topFailingContracts,
-    timestamp:            Date.now(),
+    blockNumber:         report.blockNumber,
+    totalTx:             report.totalTx,
+    failedTx:            report.failedTx,
+    failureRate:         report.failureRate,
+    topFailingContracts: report.topFailingContracts,
+    timestamp:           Date.now(),
   });
 
   // Save to disk every 50 blocks so data survives restarts
