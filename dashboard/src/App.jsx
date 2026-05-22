@@ -475,6 +475,159 @@ function AgentPanel({ agentStatus, agentLog, isMobile, onTrigger, triggering }) 
   );
 }
 
+// ── Weekly Reports Modal ──────────────────────────────────────
+function WeeklyReportsModal({ onClose, isMobile }) {
+  const [report, setReport]   = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchWeekly = async () => {
+      try {
+        const res  = await fetch(`${API}/reports/weekly`);
+        const json = await res.json();
+        setReport(json);
+      } catch (err) {
+        console.error("Failed to fetch weekly report:", err);
+        setReport(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchWeekly();
+  }, []);
+
+  const healthColor = report
+    ? report.healthScore >= 80 ? C.green : report.healthScore >= 50 ? C.amber : C.crimson
+    : C.muted;
+
+  const healthLabel = report
+    ? report.healthScore >= 80 ? "HEALTHY" : report.healthScore >= 50 ? "MODERATE" : "DEGRADED"
+    : "—";
+
+  const fmt = (n) => n != null ? Number(n).toLocaleString() : "—";
+  const pct = (n) => n != null ? `${(n * 100).toFixed(2)}%` : "—";
+
+  const periodStart = report?.period?.start ? new Date(report.period.start).toDateString() : null;
+  const periodEnd   = report?.period?.end   ? new Date(report.period.end).toDateString()   : null;
+
+  const topContracts = report?.topContracts
+    ? Object.entries(report.topContracts).sort((a, b) => b[1] - a[1]).slice(0, 5)
+    : [];
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: isMobile ? "flex-end" : "center", justifyContent: "center", background: "rgba(22,23,25,0.6)", backdropFilter: "blur(4px)", animation: "fadeIn 0.2s ease" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={{ background: C.panel, border: `1px solid ${C.border}`, width: isMobile ? "100%" : 560, maxHeight: isMobile ? "90dvh" : "85vh", overflowY: "auto", position: "relative", animation: isMobile ? "slideUp 0.3s ease" : "fadeIn 0.2s ease" }}>
+        <Corners color={C.navy} size={16} />
+
+        {/* Header */}
+        <div style={{ padding: "16px 20px", borderBottom: `1px solid ${C.borderL}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: 16, letterSpacing: 4, color: C.charcoal }}>WEEKLY REPORT</div>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL, marginTop: 2 }}>
+              {periodStart && periodEnd ? `${periodStart} → ${periodEnd}` : "auto-generated every 7 days"}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: `1px solid ${C.borderL}`, color: C.muted, cursor: "pointer", fontSize: 12, padding: "3px 9px", fontFamily: "'Barlow Condensed', sans-serif" }}>✕</button>
+        </div>
+
+        {loading ? (
+          <div style={{ padding: "48px 20px", textAlign: "center" }}>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: C.mutedL }}>Loading weekly report...</div>
+          </div>
+        ) : !report ? (
+          <div style={{ padding: "48px 20px", textAlign: "center" }}>
+            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 20, fontWeight: 700, color: C.muted, letterSpacing: 2, marginBottom: 10 }}>NO REPORT YET</div>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: C.mutedL, lineHeight: 1.8 }}>
+              Weekly reports are generated automatically every 7 days.<br />
+              The first report will appear here after the first full week of data.
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Health score */}
+            <div style={{ padding: "20px 20px 16px", borderBottom: `1px solid ${C.borderL}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL, marginBottom: 4 }}>NETWORK HEALTH SCORE</div>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                  <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: 48, color: healthColor, lineHeight: 1 }}>{report.healthScore}</div>
+                  <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 14, color: C.mutedL }}>/100</div>
+                </div>
+              </div>
+              <div style={{ background: `${healthColor}14`, border: `1px solid ${healthColor}44`, padding: "8px 16px", textAlign: "center" }}>
+                <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 18, letterSpacing: 3, color: healthColor }}>{healthLabel}</div>
+              </div>
+            </div>
+
+            {/* Overview stats */}
+            <div style={{ padding: "14px 20px", borderBottom: `1px solid ${C.borderL}`, display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+              {[
+                { label: "BLOCKS ANALYZED",  value: fmt(report.totalBlocks),                color: C.navy    },
+                { label: "TOTAL TXS",        value: fmt(report.totalTx),                    color: C.navy    },
+                { label: "TOTAL FAILURES",   value: fmt(report.totalFailed),                color: report.totalFailed > 0 ? C.crimson : C.navy },
+                { label: "AVG FAILURE RATE", value: pct(report.avgFailureRate),             color: C.amber   },
+                { label: "PEAK FAILURE RATE",value: pct(report.maxFailureRate),             color: C.crimson },
+                { label: "ALERT BLOCKS",     value: fmt(report.alertBlocks),               color: report.alertBlocks > 0 ? C.amber : C.navy },
+              ].map(s => (
+                <div key={s.label} style={{ background: C.bg, border: `1px solid ${C.borderL}`, padding: "10px 12px" }}>
+                  <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 2, color: C.mutedL }}>{s.label}</div>
+                  <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 18, color: s.color, marginTop: 2, lineHeight: 1 }}>{s.value}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Most volatile block */}
+            {report.worstBlock && (
+              <div style={{ padding: "14px 20px", borderBottom: `1px solid ${C.borderL}` }}>
+                <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL, marginBottom: 8 }}>MOST VOLATILE BLOCK</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, background: C.crimsonG, border: `1px solid ${C.crimson}44`, padding: "10px 14px" }}>
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: C.crimson, fontWeight: 700 }}>#{fmt(report.worstBlock.blockNumber)}</span>
+                  <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, color: C.mutedL }}>—</span>
+                  <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 18, color: C.crimson }}>{pct(report.worstBlock.failureRate)}</span>
+                  <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, color: C.mutedL }}>failure rate</span>
+                </div>
+              </div>
+            )}
+
+            {/* Top contracts */}
+            <div style={{ padding: "14px 20px", borderBottom: `1px solid ${C.borderL}` }}>
+              <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL, marginBottom: 8 }}>TOP FAILING CONTRACTS</div>
+              {topContracts.length === 0
+                ? <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: C.mutedL }}>No contract failures recorded.</div>
+                : topContracts.map(([addr, count], i) => {
+                    const intensity = count / (topContracts[0][1] || 1);
+                    const barColor  = intensity > 0.7 ? C.crimson : intensity > 0.4 ? C.amber : C.navy;
+                    return (
+                      <div key={addr} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: i < topContracts.length - 1 ? `1px solid ${C.borderL}44` : "none" }}>
+                        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, color: C.white, background: barColor, padding: "1px 6px", fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>
+                        {isRealAddr(addr)
+                          ? <a href={explorerUrl(addr)} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: barColor, textDecoration: "none", borderBottom: `1px dashed ${barColor}44`, flex: 1 }}>{shortAddr(addr)}</a>
+                          : <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: C.muted, flex: 1 }}>{addr}</span>
+                        }
+                        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 16, color: barColor, flexShrink: 0 }}>{fmt(count)}</span>
+                      </div>
+                    );
+                  })
+              }
+            </div>
+
+            {/* Weekly insight */}
+            {report.insight && (
+              <div style={{ padding: "14px 20px" }}>
+                <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL, marginBottom: 8 }}>WEEKLY INSIGHT</div>
+                <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: C.text, lineHeight: 1.9, background: C.bg, border: `1px solid ${C.borderL}`, padding: "12px 14px" }}>
+                  {report.insight}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── API Access modal ──────────────────────────────────────────
 function ApiAccessModal({ onClose, isMobile }) {
   const [copied, setCopied]       = useState(false);
@@ -498,11 +651,11 @@ function ApiAccessModal({ onClose, isMobile }) {
   const W    = "YOUR_WALLET_ADDRESS";
 
   const endpoints = [
-    { method: "GET",  url: `${BASE}/api/intelligence/network?wallet=${W}&mode=prepay`,           desc: "Network health snapshot" },
-    { method: "GET",  url: `${BASE}/api/intelligence/contract/0xCONTRACT?wallet=${W}`,           desc: "Contract risk score" },
-    { method: "GET",  url: `${BASE}/api/intelligence/block/BLOCK_NUMBER?wallet=${W}`,            desc: "Block analysis" },
-    { method: "GET",  url: `${BASE}/api/intelligence/usage?wallet=${W}`,                         desc: "Your usage stats" },
-    { method: "POST", url: `${BASE}/api/intelligence/confirm/QUERY_ID`,                          desc: "Confirm payment · Body: { wallet, txId }" },
+    { method: "GET",  url: `${BASE}/api/intelligence/network?wallet=${W}&mode=prepay`,  desc: "Network health snapshot" },
+    { method: "GET",  url: `${BASE}/api/intelligence/contract/0xCONTRACT?wallet=${W}`,  desc: "Contract risk score" },
+    { method: "GET",  url: `${BASE}/api/intelligence/block/BLOCK_NUMBER?wallet=${W}`,   desc: "Block analysis" },
+    { method: "GET",  url: `${BASE}/api/intelligence/usage?wallet=${W}`,                desc: "Your usage stats" },
+    { method: "POST", url: `${BASE}/api/intelligence/confirm/QUERY_ID`,                 desc: "Confirm payment · Body: { wallet, txId }" },
   ];
 
   return (
@@ -518,13 +671,11 @@ function ApiAccessModal({ onClose, isMobile }) {
           </div>
           <button onClick={onClose} style={{ background: "none", border: `1px solid ${C.borderL}`, color: C.muted, cursor: "pointer", fontSize: 12, padding: "3px 9px", fontFamily: "'Barlow Condensed', sans-serif" }}>✕</button>
         </div>
-
-        {/* Pricing */}
         <div style={{ padding: "14px 20px", borderBottom: `1px solid ${C.borderL}`, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
           {[
-            { label: "FREE TIER",     value: "5 queries",   sub: "per wallet",      color: C.green    },
-            { label: "PRICE / QUERY", value: "0.1 USDC",    sub: "after free tier", color: C.navy     },
-            { label: "NETWORK",       value: "Arc",          sub: "EVM compatible",  color: C.charcoal },
+            { label: "FREE TIER",     value: "5 queries",  sub: "per wallet",      color: C.green    },
+            { label: "PRICE / QUERY", value: "0.1 USDC",   sub: "after free tier", color: C.navy     },
+            { label: "NETWORK",       value: "Arc",         sub: "EVM compatible",  color: C.charcoal },
           ].map(s => (
             <div key={s.label} style={{ background: C.bg, border: `1px solid ${C.borderL}`, padding: "10px 12px" }}>
               <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 2, color: C.mutedL }}>{s.label}</div>
@@ -533,8 +684,6 @@ function ApiAccessModal({ onClose, isMobile }) {
             </div>
           ))}
         </div>
-
-        {/* Service wallet */}
         <div style={{ padding: "14px 20px", borderBottom: `1px solid ${C.borderL}` }}>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL, marginBottom: 8 }}>PAYMENT DESTINATION</div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, background: C.bg, border: `1px solid ${C.borderL}`, padding: "10px 12px" }}>
@@ -547,8 +696,6 @@ function ApiAccessModal({ onClose, isMobile }) {
             Send USDC to this address on Arc using any EVM wallet
           </div>
         </div>
-
-        {/* Endpoints with full URLs */}
         <div style={{ padding: "14px 20px", borderBottom: `1px solid ${C.borderL}` }}>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL, marginBottom: 8 }}>ENDPOINTS</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -560,10 +707,7 @@ function ApiAccessModal({ onClose, isMobile }) {
                     <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.navy, wordBreak: "break-all", lineHeight: 1.5 }}>{e.url}</div>
                     <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, color: C.mutedL, marginTop: 2 }}>{e.desc}</div>
                   </div>
-                  <button
-                    onClick={() => copyUrl(e.url)}
-                    style={{ background: copiedUrl === e.url ? C.green : "none", border: `1px solid ${copiedUrl === e.url ? C.green : C.borderL}`, color: copiedUrl === e.url ? C.white : C.muted, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 1, padding: "3px 8px", flexShrink: 0, transition: "all 0.2s" }}
-                  >
+                  <button onClick={() => copyUrl(e.url)} style={{ background: copiedUrl === e.url ? C.green : "none", border: `1px solid ${copiedUrl === e.url ? C.green : C.borderL}`, color: copiedUrl === e.url ? C.white : C.muted, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 1, padding: "3px 8px", flexShrink: 0, transition: "all 0.2s" }}>
                     {copiedUrl === e.url ? "✓" : "COPY"}
                   </button>
                 </div>
@@ -574,8 +718,6 @@ function ApiAccessModal({ onClose, isMobile }) {
             Replace <span style={{ color: C.navy }}>YOUR_WALLET_ADDRESS</span> with your actual wallet address
           </div>
         </div>
-
-        {/* How to pay */}
         <div style={{ padding: "14px 20px", borderBottom: `1px solid ${C.borderL}` }}>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL, marginBottom: 8 }}>HOW TO PAY</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -593,8 +735,6 @@ function ApiAccessModal({ onClose, isMobile }) {
             ))}
           </div>
         </div>
-
-        {/* Selective queries */}
         <div style={{ padding: "14px 20px" }}>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL, marginBottom: 8 }}>SELECTIVE QUERIES</div>
           <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.text, lineHeight: 2, background: C.bg, border: `1px solid ${C.borderL}`, padding: "10px 12px" }}>
@@ -616,10 +756,10 @@ function ApiAccessModal({ onClose, isMobile }) {
 
 // ── LANDING PAGE ──────────────────────────────────────────────
 function LandingPage({ onLaunch }) {
-  const [liveStats, setLiveStats]       = useState(null);
-  const [agentStats, setAgentStats]     = useState(null);
-  const [launching, setLaunching]       = useState(false);
-  const isMobile                        = useIsMobile();
+  const [liveStats, setLiveStats]   = useState(null);
+  const [agentStats, setAgentStats] = useState(null);
+  const [launching, setLaunching]   = useState(false);
+  const isMobile                    = useIsMobile();
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -643,51 +783,28 @@ function LandingPage({ onLaunch }) {
 
   const handleLaunch = () => {
     setLaunching(true);
-    setTimeout(() => onLaunch(), 600);
+    setTimeout(() => {
+      sessionStorage.setItem("arcsense_launched", "true");
+      onLaunch();
+    }, 600);
   };
 
   const features = [
-    {
-      icon: "⛓️",
-      title: "Live Block Intelligence",
-      desc: "Scans every Arc block in real time. Detects failed transactions, identifies problematic contracts, and classifies failure behavior across the network.",
-      color: C.navy,
-      bg: C.navyG,
-    },
-    {
-      icon: "💳",
-      title: "Pay-Per-Query API",
-      desc: "5 free queries per wallet. Then 0.1 USDC per query — paid from any EVM wallet. Verified on-chain via Arc Explorer. No Circle account required.",
-      color: C.green,
-      bg: C.greenG,
-    },
-    {
-      icon: "⚡",
-      title: "Autonomous Agent",
-      desc: "An on-chain agent that monitors Arc every 5 minutes, makes autonomous decisions, and pays for intelligence using USDC from its own Circle wallet.",
-      color: C.amber,
-      bg: C.amberG,
-    },
+    { icon: "⛓️", title: "Live Block Intelligence", desc: "Scans every Arc block in real time. Detects failed transactions, identifies problematic contracts, and classifies failure behavior across the network.", color: C.navy, bg: C.navyG },
+    { icon: "💳", title: "Pay-Per-Query API", desc: "5 free queries per wallet. Then 0.1 USDC per query — paid from any EVM wallet. Verified on-chain via Arc Explorer. No Circle account required.", color: C.green, bg: C.greenG },
+    { icon: "⚡", title: "Autonomous Agent", desc: "An on-chain agent that monitors Arc every 5 minutes, makes autonomous decisions, and pays for intelligence using USDC from its own Circle wallet.", color: C.amber, bg: C.amberG },
   ];
 
   const steps = [
-    { n: "01", title: "Query the API", desc: "Send a request with your wallet address. First 5 queries are free." },
-    { n: "02", title: "Pay in USDC",   desc: "After free tier, send 0.1 USDC to the service wallet from any EVM wallet on Arc." },
-    { n: "03", title: "Get Intelligence", desc: "Payment verified on-chain via Blockscout. Intelligence returned immediately." },
+    { n: "01", title: "Query the API",       desc: "Send a request with your wallet address. First 5 queries are free." },
+    { n: "02", title: "Pay in USDC",         desc: "After free tier, send 0.1 USDC to the service wallet from any EVM wallet on Arc." },
+    { n: "03", title: "Get Intelligence",    desc: "Payment verified on-chain via Blockscout. Intelligence returned immediately." },
   ];
 
   return (
-    <div style={{
-      background: C.bg,
-      minHeight: "100dvh",
-      display: "flex",
-      flexDirection: "column",
-      opacity: launching ? 0 : 1,
-      transition: "opacity 0.6s ease",
-      overflow: "auto",
-    }}>
+    <div style={{ background: C.bg, minHeight: "100dvh", display: "flex", flexDirection: "column", opacity: launching ? 0 : 1, transition: "opacity 0.6s ease", overflow: "auto" }}>
 
-      {/* ── NAV ── */}
+      {/* NAV */}
       <div style={{ background: C.panel, borderBottom: `1px solid ${C.border}`, padding: isMobile ? "0 20px" : "0 48px", height: 62, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, position: "sticky", top: 0, zIndex: 50 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <ArcSenseLogo size={32} />
@@ -697,57 +814,47 @@ function LandingPage({ onLaunch }) {
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <a href="https://github.com/2TheMoom/arcsense-lite" target="_blank" rel="noopener noreferrer"
+          <a href="https://github.com/2TheMoon/arcsense-lite" target="_blank" rel="noopener noreferrer"
             style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 10, letterSpacing: 2, color: C.muted, textDecoration: "none", padding: "6px 12px", border: `1px solid ${C.border}`, display: isMobile ? "none" : "block" }}
           >GITHUB</a>
           <button onClick={handleLaunch} style={{ background: C.navy, border: "none", color: C.white, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 11, letterSpacing: 3, fontWeight: 700, padding: isMobile ? "8px 16px" : "8px 22px", transition: "all 0.2s" }}
             onMouseEnter={e => e.currentTarget.style.background = C.navyL}
             onMouseLeave={e => e.currentTarget.style.background = C.navy}
-          >
-            LAUNCH DASHBOARD →
-          </button>
+          >LAUNCH DASHBOARD →</button>
         </div>
       </div>
 
-      {/* ── HERO ── */}
+      {/* HERO */}
       <div style={{ padding: isMobile ? "60px 24px 40px" : "100px 48px 60px", textAlign: "center", maxWidth: 860, margin: "0 auto", width: "100%" }}>
         <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: C.panel, border: `1px solid ${C.border}`, padding: "5px 14px", marginBottom: 28 }}>
           <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.green, animation: "blink 1.8s ease-in-out infinite" }} />
           <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9, letterSpacing: 3, color: C.green, fontWeight: 700 }}>LIVE ON ARC</span>
         </div>
-
         <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: isMobile ? 40 : 68, letterSpacing: isMobile ? 2 : 4, color: C.charcoal, lineHeight: 1, marginBottom: 20 }}>
-          Real-time intelligence<br />
-          <span style={{ color: C.navy }}>infrastructure for Arc</span>
+          Real-time intelligence<br /><span style={{ color: C.navy }}>infrastructure for Arc</span>
         </div>
-
         <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: isMobile ? 11 : 13, color: C.muted, lineHeight: 1.9, maxWidth: 620, margin: "0 auto 36px", letterSpacing: 0.3 }}>
           ArcSense scans every Arc block live, surfaces failing contracts, and exposes gated intelligence through a pay-per-query API — consumed by developers, wallets, and autonomous agents.
         </div>
-
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
           <button onClick={handleLaunch} style={{ background: C.navy, border: "none", color: C.white, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 13, letterSpacing: 3, fontWeight: 700, padding: "14px 32px", transition: "all 0.2s" }}
             onMouseEnter={e => e.currentTarget.style.background = C.navyL}
             onMouseLeave={e => e.currentTarget.style.background = C.navy}
-          >
-            ▶ LAUNCH DASHBOARD
-          </button>
-          <a href="https://github.com/2TheMoom/arcsense-lite" target="_blank" rel="noopener noreferrer"
-            style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 13, letterSpacing: 3, fontWeight: 700, padding: "14px 32px", textDecoration: "none", display: "inline-block", transition: "all 0.2s" }}
-          >
-            VIEW GITHUB
-          </a>
+          >▶ LAUNCH DASHBOARD</button>
+          <a href="https://github.com/2TheMoon/arcsense-lite" target="_blank" rel="noopener noreferrer"
+            style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 13, letterSpacing: 3, fontWeight: 700, padding: "14px 32px", textDecoration: "none", display: "inline-block" }}
+          >VIEW GITHUB</a>
         </div>
       </div>
 
-      {/* ── LIVE STATS BAR ── */}
+      {/* LIVE STATS BAR */}
       <div style={{ background: C.panel, borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, padding: isMobile ? "20px 24px" : "20px 48px" }}>
         <div style={{ maxWidth: 960, margin: "0 auto", display: "grid", gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(4,1fr)", gap: isMobile ? 16 : 0 }}>
           {[
-            { label: "BLOCKS SCANNED",  value: liveStats?.totalBlocksScanned ? liveStats.totalBlocksScanned.toLocaleString() : "—", color: C.navy },
-            { label: "ALERTS TRIGGERED", value: liveStats?.totalAlertsTriggered ? liveStats.totalAlertsTriggered.toLocaleString() : "—", color: C.crimson },
-            { label: "AGENT CYCLES",    value: agentStats?.totalCycles ? agentStats.totalCycles.toLocaleString() : "—", color: C.green },
-            { label: "USDC SPENT",      value: agentStats?.totalUsdcSpent ? `$${agentStats.totalUsdcSpent.toFixed(2)}` : "—", color: C.green },
+            { label: "BLOCKS SCANNED",   value: liveStats?.totalBlocksScanned   ? liveStats.totalBlocksScanned.toLocaleString()          : "—", color: C.navy    },
+            { label: "ALERTS TRIGGERED", value: liveStats?.totalAlertsTriggered ? liveStats.totalAlertsTriggered.toLocaleString()         : "—", color: C.crimson },
+            { label: "AGENT CYCLES",     value: agentStats?.totalCycles         ? agentStats.totalCycles.toLocaleString()                 : "—", color: C.green   },
+            { label: "USDC SPENT",       value: agentStats?.totalUsdcSpent      ? `$${agentStats.totalUsdcSpent.toFixed(2)}`              : "—", color: C.green   },
           ].map((s, i) => (
             <div key={s.label} style={{ textAlign: "center", borderRight: !isMobile && i < 3 ? `1px solid ${C.border}` : "none", padding: "0 24px" }}>
               <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: 32, color: s.color, lineHeight: 1 }}>{s.value}</div>
@@ -757,12 +864,10 @@ function LandingPage({ onLaunch }) {
         </div>
       </div>
 
-      {/* ── FEATURES ── */}
+      {/* FEATURES */}
       <div style={{ padding: isMobile ? "48px 24px" : "72px 48px", maxWidth: 960, margin: "0 auto", width: "100%" }}>
         <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 4, color: C.mutedL, textAlign: "center", marginBottom: 8 }}>WHAT ARCSENSE DOES</div>
-        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: isMobile ? 28 : 36, letterSpacing: 2, color: C.charcoal, textAlign: "center", marginBottom: 40 }}>
-          Everything you need for Arc intelligence
-        </div>
+        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: isMobile ? 28 : 36, letterSpacing: 2, color: C.charcoal, textAlign: "center", marginBottom: 40 }}>Everything you need for Arc intelligence</div>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3,1fr)", gap: 16 }}>
           {features.map(f => (
             <div key={f.title} style={{ background: C.panel, border: `1px solid ${C.border}`, padding: "28px 24px", position: "relative" }}>
@@ -779,37 +884,32 @@ function LandingPage({ onLaunch }) {
         </div>
       </div>
 
-      {/* ── HOW IT WORKS ── */}
+      {/* HOW IT WORKS */}
       <div style={{ background: C.panel, borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, padding: isMobile ? "48px 24px" : "72px 48px" }}>
         <div style={{ maxWidth: 960, margin: "0 auto" }}>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 4, color: C.mutedL, textAlign: "center", marginBottom: 8 }}>HOW IT WORKS</div>
-          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: isMobile ? 28 : 36, letterSpacing: 2, color: C.charcoal, textAlign: "center", marginBottom: 48 }}>
-            Three steps to intelligence
-          </div>
+          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: isMobile ? 28 : 36, letterSpacing: 2, color: C.charcoal, textAlign: "center", marginBottom: 48 }}>Three steps to intelligence</div>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3,1fr)", gap: 24 }}>
-            {steps.map((s, i) => (
+            {steps.map(s => (
               <div key={s.n} style={{ textAlign: "center" }}>
                 <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: 48, color: C.border, lineHeight: 1, marginBottom: 12 }}>{s.n}</div>
                 <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 16, letterSpacing: 2, color: C.charcoal, marginBottom: 10 }}>{s.title}</div>
                 <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: C.muted, lineHeight: 1.9 }}>{s.desc}</div>
-                {i < steps.length - 1 && !isMobile && (
-                  <div style={{ position: "absolute" }} />
-                )}
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* ── BUILT WITH ── */}
+      {/* BUILT WITH */}
       <div style={{ padding: isMobile ? "40px 24px" : "60px 48px", maxWidth: 960, margin: "0 auto", width: "100%", textAlign: "center" }}>
         <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 4, color: C.mutedL, marginBottom: 24 }}>BUILT WITH</div>
         <div style={{ display: "flex", gap: 24, justifyContent: "center", alignItems: "center", flexWrap: "wrap" }}>
           {[
-            { label: "Arc Network",   sub: "Layer 1 blockchain" },
-            { label: "Circle USDC",   sub: "Programmable payments" },
-            { label: "Blockscout",    sub: "On-chain verification" },
-            { label: "Railway",       sub: "Engine hosting" },
+            { label: "Arc Network",  sub: "Layer 1 blockchain"     },
+            { label: "Circle USDC",  sub: "Programmable payments"  },
+            { label: "Blockscout",   sub: "On-chain verification"  },
+            { label: "Railway",      sub: "Engine hosting"         },
           ].map(b => (
             <div key={b.label} style={{ background: C.panel, border: `1px solid ${C.border}`, padding: "12px 20px", textAlign: "center" }}>
               <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 14, letterSpacing: 2, color: C.charcoal }}>{b.label}</div>
@@ -819,23 +919,17 @@ function LandingPage({ onLaunch }) {
         </div>
       </div>
 
-      {/* ── CTA BANNER ── */}
+      {/* CTA BANNER */}
       <div style={{ background: C.navy, padding: isMobile ? "40px 24px" : "60px 48px", textAlign: "center" }}>
-        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: isMobile ? 28 : 40, letterSpacing: 3, color: C.white, marginBottom: 12 }}>
-          Start exploring Arc intelligence
-        </div>
-        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "rgba(240,237,231,0.6)", marginBottom: 28 }}>
-          Live on Arc · 5 free queries per wallet
-        </div>
+        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: isMobile ? 28 : 40, letterSpacing: 3, color: C.white, marginBottom: 12 }}>Start exploring Arc intelligence</div>
+        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "rgba(240,237,231,0.6)", marginBottom: 28 }}>Live on Arc · 5 free queries per wallet</div>
         <button onClick={handleLaunch} style={{ background: C.white, border: "none", color: C.navy, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 13, letterSpacing: 3, fontWeight: 900, padding: "14px 36px", transition: "all 0.2s" }}
           onMouseEnter={e => { e.currentTarget.style.background = C.bg; }}
           onMouseLeave={e => { e.currentTarget.style.background = C.white; }}
-        >
-          ▶ LAUNCH DASHBOARD
-        </button>
+        >▶ LAUNCH DASHBOARD</button>
       </div>
 
-      {/* ── FOOTER ── */}
+      {/* FOOTER */}
       <div style={{ borderTop: `1px solid ${C.border}`, padding: isMobile ? "18px 24px" : "18px 48px", display: "flex", flexDirection: isMobile ? "column" : "row", justifyContent: "space-between", alignItems: "center", gap: 10, background: C.panel, textAlign: isMobile ? "center" : "left" }}>
         <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 12, color: C.muted }}>
           Built by{" "}<a href="https://x.com/olumi441" target="_blank" rel="noopener noreferrer" style={{ color: C.navy, fontWeight: 700, textDecoration: "none" }}>Abu Olumi</a>
@@ -843,11 +937,8 @@ function LandingPage({ onLaunch }) {
         <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 12, color: C.muted }}>
           Powered by{" "}<a href="https://x.com/arc" target="_blank" rel="noopener noreferrer" style={{ color: C.navy, fontWeight: 700, textDecoration: "none" }}>Arc</a>
         </span>
-        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 10, letterSpacing: 2, color: C.mutedL }}>
-          Arc Hackathon 2026 · Track 4
-        </span>
+        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 10, letterSpacing: 2, color: C.mutedL }}>Arc Hackathon 2026 · Track 4</span>
       </div>
-
     </div>
   );
 }
@@ -868,37 +959,45 @@ function MobileSignalBar({ trend, insight }) {
 }
 
 // ── Top bar ───────────────────────────────────────────────────
-function TopBar({ trend, severity, insight, latestBlock, isMobile, onApiAccess }) {
+function TopBar({ trend, severity, insight, latestBlock, isMobile, onApiAccess, onWeeklyReport, onBackToLanding }) {
   const sevColor   = severity === "HIGH" ? C.crimson : severity === "MEDIUM" ? C.amber : C.navy;
   const sevBg      = severity === "HIGH" ? C.crimsonG : severity === "MEDIUM" ? C.amberG : C.navyG;
   const trendColor = trend.includes("RISING") ? C.crimson : trend.includes("DROP") ? C.navyL : C.muted;
+
   if (isMobile) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", height: 54, borderBottom: `1px solid ${C.border}`, background: C.panel, flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <ArcSenseLogo size={28} />
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <button onClick={onBackToLanding} style={{ background: "none", border: `1px solid ${C.borderL}`, color: C.muted, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 1, padding: "3px 7px" }}>← HOME</button>
+          <ArcSenseLogo size={24} />
           <div>
-            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: 16, letterSpacing: 4, color: C.charcoal, lineHeight: 1 }}>ARCSENSE</div>
+            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: 14, letterSpacing: 3, color: C.charcoal, lineHeight: 1 }}>ARCSENSE</div>
             <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 6, letterSpacing: 1, color: C.mutedL }}>ARC TESTNET</div>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <button onClick={onWeeklyReport} style={{ background: C.navyG, border: `1px solid ${C.navy}44`, color: C.navy, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 1, fontWeight: 700, padding: "4px 8px" }}>📅</button>
           <button onClick={onApiAccess} style={{ background: C.navyG, border: `1px solid ${C.navy}44`, color: C.navy, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 2, fontWeight: 700, padding: "4px 10px" }}>API</button>
-          <div style={{ background: sevBg, border: `1px solid ${sevColor}44`, padding: "4px 10px", textAlign: "center" }}>
-            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 2, color: C.mutedL }}>SEVERITY</div>
-            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 13, color: sevColor, letterSpacing: 3 }}>{severity}</div>
+          <div style={{ background: sevBg, border: `1px solid ${sevColor}44`, padding: "4px 8px", textAlign: "center" }}>
+            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 7, letterSpacing: 2, color: C.mutedL }}>SEV</div>
+            <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, fontSize: 11, color: sevColor, letterSpacing: 2 }}>{severity}</div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 5, border: `1px solid ${C.navy}44`, padding: "4px 8px", background: C.navyG }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, border: `1px solid ${C.navy}44`, padding: "4px 7px", background: C.navyG }}>
             <div style={{ width: 5, height: 5, borderRadius: "50%", background: C.navy, animation: "blink 1.8s ease-in-out infinite" }} />
-            <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9, letterSpacing: 2, color: C.navy, fontWeight: 600 }}>LIVE</span>
+            <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 2, color: C.navy, fontWeight: 600 }}>LIVE</span>
           </div>
         </div>
       </div>
     );
   }
+
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 32px", height: 62, borderBottom: `1px solid ${C.border}`, background: C.panel, flexShrink: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <button onClick={onBackToLanding} style={{ background: "none", border: `1px solid ${C.borderL}`, color: C.muted, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 2, padding: "5px 10px", transition: "all 0.2s", flexShrink: 0 }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = C.navy; e.currentTarget.style.color = C.navy; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = C.borderL; e.currentTarget.style.color = C.muted; }}
+        >← HOME</button>
         <ArcSenseLogo size={36} />
         <div>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 900, fontSize: 20, letterSpacing: 5, color: C.charcoal, lineHeight: 1 }}>ARCSENSE</div>
@@ -918,12 +1017,14 @@ function TopBar({ trend, severity, insight, latestBlock, isMobile, onApiAccess }
         ))}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <button onClick={onWeeklyReport} style={{ background: C.navyG, border: `1px solid ${C.navy}44`, color: C.navy, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9, letterSpacing: 3, fontWeight: 700, padding: "6px 14px", transition: "all 0.2s" }}
+          onMouseEnter={e => { e.currentTarget.style.background = C.navy; e.currentTarget.style.color = C.white; }}
+          onMouseLeave={e => { e.currentTarget.style.background = C.navyG; e.currentTarget.style.color = C.navy; }}
+        >📅 WEEKLY</button>
         <button onClick={onApiAccess} style={{ background: C.navyG, border: `1px solid ${C.navy}44`, color: C.navy, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9, letterSpacing: 3, fontWeight: 700, padding: "6px 14px", transition: "all 0.2s" }}
           onMouseEnter={e => { e.currentTarget.style.background = C.navy; e.currentTarget.style.color = C.white; }}
           onMouseLeave={e => { e.currentTarget.style.background = C.navyG; e.currentTarget.style.color = C.navy; }}
-        >
-          ⚡ API ACCESS
-        </button>
+        >⚡ API ACCESS</button>
         <div style={{ display: "flex", alignItems: "center", gap: 7, border: `1px solid ${C.navy}44`, padding: "5px 12px", background: C.navyG }}>
           <div style={{ width: 5, height: 5, borderRadius: "50%", background: C.navy, animation: "blink 1.8s ease-in-out infinite" }} />
           <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 10, letterSpacing: 3, color: C.navy, fontWeight: 600 }}>LIVE</span>
@@ -982,17 +1083,24 @@ function Footer({ isMobile }) {
 
 // ── Main ──────────────────────────────────────────────────────
 export default function ArcSenseDashboard() {
-  const [showLanding, setShowLanding]   = useState(true);
-  const [blocks, setBlocks]             = useState([]);
-  const [alert, setAlert]               = useState(null);
-  const [meta, setMeta]                 = useState({ totalBlocksScanned: 0, totalAlertsTriggered: 0 });
-  const [selectedContract, setSelected] = useState(null);
-  const [agentStatus, setAgentStatus]   = useState(null);
-  const [agentLog, setAgentLog]         = useState([]);
-  const [triggering, setTriggering]     = useState(false);
-  const [showApiModal, setShowApiModal] = useState(false);
-  const alertedBlocks                   = useRef(new Set());
-  const isMobile                        = useIsMobile();
+  // ── sessionStorage persistence — refresh stays on dashboard
+  const [showLanding, setShowLanding]       = useState(() => sessionStorage.getItem("arcsense_launched") !== "true");
+  const [blocks, setBlocks]                 = useState([]);
+  const [alert, setAlert]                   = useState(null);
+  const [meta, setMeta]                     = useState({ totalBlocksScanned: 0, totalAlertsTriggered: 0 });
+  const [selectedContract, setSelected]     = useState(null);
+  const [agentStatus, setAgentStatus]       = useState(null);
+  const [agentLog, setAgentLog]             = useState([]);
+  const [triggering, setTriggering]         = useState(false);
+  const [showApiModal, setShowApiModal]     = useState(false);
+  const [showWeeklyModal, setShowWeeklyModal] = useState(false);
+  const alertedBlocks                       = useRef(new Set());
+  const isMobile                            = useIsMobile();
+
+  const handleBackToLanding = () => {
+    sessionStorage.removeItem("arcsense_launched");
+    setShowLanding(true);
+  };
 
   useEffect(() => {
     const fetchReports = async () => {
@@ -1128,7 +1236,7 @@ export default function ArcSenseDashboard() {
 
       {isMobile ? (
         <div style={{ background: C.bg, minHeight: "100dvh", display: "flex", flexDirection: "column" }}>
-          <TopBar trend={trend} severity={severity} insight={insight} latestBlock={latest?.blockNumber} isMobile={true} onApiAccess={() => setShowApiModal(true)} />
+          <TopBar trend={trend} severity={severity} insight={insight} latestBlock={latest?.blockNumber} isMobile={true} onApiAccess={() => setShowApiModal(true)} onWeeklyReport={() => setShowWeeklyModal(true)} onBackToLanding={handleBackToLanding} />
           <MobileSignalBar trend={trend} insight={insight} />
           <div style={{ flex: 1, padding: "12px", display: "flex", flexDirection: "column", gap: 12 }}>
             {selectedContract && selectedClass && <FilterBadge addr={selectedContract} classification={selectedClass} onClear={() => setSelected(null)} />}
@@ -1145,7 +1253,7 @@ export default function ArcSenseDashboard() {
         </div>
       ) : (
         <div style={{ background: C.bg, height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <TopBar trend={trend} severity={severity} insight={insight} latestBlock={latest?.blockNumber} isMobile={false} onApiAccess={() => setShowApiModal(true)} />
+          <TopBar trend={trend} severity={severity} insight={insight} latestBlock={latest?.blockNumber} isMobile={false} onApiAccess={() => setShowApiModal(true)} onWeeklyReport={() => setShowWeeklyModal(true)} onBackToLanding={handleBackToLanding} />
           <div style={{ flex: 1, padding: "14px 24px", display: "flex", flexDirection: "column", gap: 10, overflow: "hidden", minHeight: 0 }}>
             {selectedContract && selectedClass && <FilterBadge addr={selectedContract} classification={selectedClass} onClear={() => setSelected(null)} />}
             {selectedContract
@@ -1164,7 +1272,8 @@ export default function ArcSenseDashboard() {
       )}
 
       {alert && <AlertToast alert={alert} onDismiss={() => setAlert(null)} isMobile={isMobile} />}
-      {showApiModal && <ApiAccessModal onClose={() => setShowApiModal(false)} isMobile={isMobile} />}
+      {showApiModal    && <ApiAccessModal      onClose={() => setShowApiModal(false)}    isMobile={isMobile} />}
+      {showWeeklyModal && <WeeklyReportsModal  onClose={() => setShowWeeklyModal(false)} isMobile={isMobile} />}
     </>
   );
 }

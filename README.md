@@ -15,6 +15,7 @@ ArcSense scans live blocks on Arc Network's testnet, detects failed transactions
 | **Dashboard** | [arcsense-lite.vercel.app](https://arcsense-lite.vercel.app) |
 | **Engine API** | [arcsense-lite-production.up.railway.app](https://arcsense-lite-production.up.railway.app) |
 | **Arc Explorer** | [testnet.arcscan.app](https://testnet.arcscan.app) |
+| **X** | [@ArcSense_](https://x.com/ArcSense_) |
 
 ---
 
@@ -26,6 +27,7 @@ Most tools track transaction volume. ArcSense tracks where things break — and 
 - Detects failed transactions and identifies which contracts cause them
 - Tracks failure patterns across blocks with behavioral classification
 - Fires alerts when failure rate crosses 10% or 15%
+- Generates weekly intelligence reports automatically every 7 days
 - Exposes a **pay-per-query intelligence API** open to any Arc Testnet wallet
 - Runs an **autonomous agent** that monitors the network, makes decisions, and pays for intelligence using USDC via Circle Wallets — no human involvement
 
@@ -37,7 +39,7 @@ The ArcSense Agent runs on a 5-minute scheduler and operates entirely without hu
 
 **Every cycle the agent:**
 
-1. Fetches live network health directly from the engine
+1. Fetches live network health directly from the engine — bypasses the payment gate entirely
 2. Runs a decision engine against configurable thresholds
 3. If conditions are met, sends 0.1 USDC from its own Circle Wallet to the ArcSense service wallet
 4. Receives paid intelligence — contract risk scores or block analysis
@@ -95,11 +97,24 @@ Token: USDC (native)
 GET  /api/intelligence/network                    — Network health snapshot
 GET  /api/intelligence/contract/:address          — Contract risk score + classification
 GET  /api/intelligence/block/:number              — Block analysis
-GET  /api/intelligence/usage                      — Wallet usage stats
-POST /api/intelligence/confirm/:queryId           — Confirm payment and unlock query
+GET  /api/intelligence/usage                      — Wallet usage stats + paid credits
+POST /api/intelligence/confirm/:queryId           — Confirm payment and add 1 credit
+GET  /reports/weekly                              — Latest weekly intelligence report
 ```
 
-All GET endpoints accept `?wallet=0xYOURWALLET&mode=prepay` query params.
+All GET intelligence endpoints accept `?wallet=0xYOURWALLET&mode=prepay` query params.
+
+### Full production URLs
+
+```
+GET  https://arcsense-lite-production.up.railway.app/api/intelligence/network?wallet=YOUR_WALLET_ADDRESS&mode=prepay
+GET  https://arcsense-lite-production.up.railway.app/api/intelligence/contract/0xCONTRACT?wallet=YOUR_WALLET_ADDRESS
+GET  https://arcsense-lite-production.up.railway.app/api/intelligence/block/BLOCK_NUMBER?wallet=YOUR_WALLET_ADDRESS
+GET  https://arcsense-lite-production.up.railway.app/api/intelligence/usage?wallet=YOUR_WALLET_ADDRESS
+POST https://arcsense-lite-production.up.railway.app/api/intelligence/confirm/QUERY_ID
+```
+
+Replace `YOUR_WALLET_ADDRESS` with your actual Arc Testnet wallet address.
 
 ### How to query
 
@@ -127,8 +142,8 @@ The API returns a `payment` object with step-by-step instructions:
       "1. Send exactly 0.1 USDC to: 0xb071...6218",
       "2. Use any Arc Testnet EVM wallet",
       "3. Call POST /api/intelligence/confirm/:queryId",
-      "4. Body: { wallet, txHash }",
-      "5. Intelligence returned immediately"
+      "4. Body: { wallet, txId }",
+      "5. 1 credit added — next query served immediately"
     ]
   }
 }
@@ -137,10 +152,10 @@ The API returns a `payment` object with step-by-step instructions:
 **Step 4 — Confirm and unlock:**
 ```bash
 POST /api/intelligence/confirm/:queryId
-Body: { "wallet": "0xYOURS", "txHash": "0xTX_HASH" }
+Body: { "wallet": "0xYOURS", "txId": "0xTX_HASH" }
 ```
 
-Payment is verified via Blockscout on Arc Testnet. No Circle API required.
+Payment is verified via Blockscout on Arc Testnet. No Circle API required. One credit is added per payment and consumed automatically on the next query.
 
 ### Selective queries
 
@@ -185,6 +200,8 @@ GET /api/intelligence/block/41234567?wallet=0xYOURS
 
 **[arcsense-lite.vercel.app](https://arcsense-lite.vercel.app)**
 
+The dashboard has a landing page that loads first with live stats pulled from the engine. Click Launch Dashboard to enter the live interface.
+
 | Panel | Description |
 |---|---|
 | Block Feed | Live scrolling stream of blocks with failure indicators |
@@ -192,7 +209,8 @@ GET /api/intelligence/block/41234567?wallet=0xYOURS
 | Contract Intelligence | Ranked failing contracts with behavioral classification and Arc Explorer links |
 | Agent Intelligence | Live agent status, decision log, USDC spent, manual trigger |
 | Stats Row | Blocks scanned, total failures, avg rate, alerts, agent cycles, USDC spent |
-| API Access | Payment instructions, endpoints, and service wallet — accessible from topbar |
+| API Access | Full production endpoint URLs, service wallet, payment instructions — topbar |
+| Weekly Reports | Auto-generated weekly intelligence report — topbar |
 
 **Contract classifications:**
 - 📛 HIGH FREQUENCY FAILER — 10+ failures, 2+ per block
@@ -200,6 +218,23 @@ GET /api/intelligence/block/41234567?wallet=0xYOURS
 - 🆕 NEW FAILURE — recent, 2+ failures
 - 🔄 RECURRING PATTERN — 1.5+ failures per block
 - 🔍 OCCASIONAL FAILURE — isolated incidents
+
+---
+
+## Weekly Reports
+
+ArcSense automatically generates weekly intelligence reports every 7 days.
+
+Each report includes:
+- Total blocks and transactions analyzed
+- Average and peak failure rates
+- Alert count and critical block count
+- Network health score (0—100)
+- Top 5 failing contracts of the week
+- Most volatile block
+- Plain-English weekly insight
+
+Reports are accessible via the Weekly Reports button in the dashboard topbar and via the `/reports/weekly` API endpoint.
 
 ---
 
@@ -239,15 +274,16 @@ arcsense-lite/
 │   │   └── network.ts
 │   ├── payment/
 │   │   ├── circlePayment.ts      # Circle API wrapper
-│   │   └── queryTracker.ts       # Free tier + usage tracking
+│   │   └── queryTracker.ts       # Free tier + paid credits + usage tracking
 │   ├── utils/
 │   │   └── provider.ts           # Arc Testnet RPC provider
 │   └── index.ts                  # Engine entry point + API routes
 ├── dashboard/
 │   └── src/
-│       └── App.jsx               # Full React dashboard
+│       └── App.jsx               # Full React dashboard + landing page
 ├── reports/
-│   └── output/                   # Weekly report files
+│   ├── weekly-store.json         # Weekly snapshot accumulator
+│   └── weekly-*.json             # Generated weekly report files
 ├── .env.example
 └── package.json
 ```
@@ -343,18 +379,19 @@ Open `http://localhost:5173`.
 
 ArcSense uses Circle Developer Wallets for agent-to-service USDC transfers on Arc Testnet.
 
-- **Agent wallet** — holds USDC, sends 0.1 USDC per intelligence purchase
-- **Service wallet** — receives payments, balance visible on dashboard
+- **Agent wallet** — holds USDC, sends 0.1 USDC per intelligence purchase autonomously
+- **Service wallet** — receives payments from agent and external developers, balance visible on dashboard
 - **External payments** — verified via Blockscout API, no Circle account needed for external users
 - **Fee level** — MEDIUM for all transfers on Arc Testnet
+- **Credit system** — each confirmed payment adds 1 credit to the wallet, consumed automatically on the next query
 
 ---
 
 ## What's Next
 
 - Historical pattern tracking across sessions
-- Weekly report panel on the dashboard
 - Multi-contract correlation analysis
+- Contract search bar
 - Arc Mainnet support
 
 ---
