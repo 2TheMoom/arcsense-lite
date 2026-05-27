@@ -1,0 +1,16 @@
+$kind: http-request
+name: https://arcsense-lite-production.up.railway.app/api/intelligence/confirm/1c4002d3-9342-495c-9728-0dfa4e51a44c
+url: https://arcsense-lite-production.up.railway.app/api/intelligence/confirm/1c4002d3-9342-495c-9728-0dfa4e51a44c
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: "{\r
+
+    \    \"wallet\": \"0x1d6038A425059545996eB14E34cFb8A3b7791Ec5\",\r
+
+    \    \"txId\": \"0xdc8aa7cc244dbf9c46514c6bf26fd2223e58302ff936c31e992d0991184c3ef7\"\r
+
+    }"
+order: 1778787405926
