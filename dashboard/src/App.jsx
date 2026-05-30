@@ -655,6 +655,7 @@ function ApiAccessModal({ onClose, isMobile }) {
     { method: "GET",  url: `${BASE}/api/intelligence/contract/0xCONTRACT?wallet=${W}`,  desc: "Contract risk score" },
     { method: "GET",  url: `${BASE}/api/intelligence/block/BLOCK_NUMBER?wallet=${W}`,   desc: "Block analysis" },
     { method: "GET",  url: `${BASE}/api/intelligence/usage?wallet=${W}`,                desc: "Your usage stats" },
+    { method: "GET",  url: `${BASE}/reports/weekly`,                                    desc: "Latest weekly intelligence report" },
     { method: "POST", url: `${BASE}/api/intelligence/confirm/QUERY_ID`,                 desc: "Confirm payment · Body: { wallet, txId }" },
   ];
 
