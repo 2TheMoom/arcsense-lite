@@ -1,4 +1,6 @@
 import "dotenv/config";
+import * as fs   from "fs";
+import * as path from "path";
 import express from "express";
 import cors from "cors";
 import { analyzeBlock } from "./analysis/analyzeBlock";
@@ -39,6 +41,23 @@ app.get("/reports", (req, res) => {
   });
 });
 
+// ── Weekly report endpoint ────────────────────────────────────
+app.get("/reports/weekly", (req, res) => {
+  try {
+    const dir   = path.join(process.cwd(), "reports");
+    if (!fs.existsSync(dir)) return res.status(404).json({ error: "No weekly report yet" });
+    const files = fs.readdirSync(dir)
+      .filter(f => f.startsWith("weekly-") && f.endsWith(".json"))
+      .sort()
+      .reverse();
+    if (files.length === 0) return res.status(404).json({ error: "No weekly report yet" });
+    const latest = JSON.parse(fs.readFileSync(path.join(dir, files[0]), "utf-8"));
+    res.json(latest);
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to load weekly report" });
+  }
+});
+
 // ── Intelligence API routes ───────────────────────────────────
 app.get("/api/intelligence/contract/:address", async (req, res) => {
   const { address } = req.params;
@@ -68,7 +87,7 @@ app.get("/api/intelligence/block/:number", async (req, res) => {
 });
 
 app.post("/api/intelligence/confirm/:queryId", async (req, res) => {
-  const { queryId }    = req.params;
+  const { queryId }      = req.params;
   const { txId, wallet } = req.body;
   if (!txId || !wallet) return res.status(400).json({ error: "txId and wallet required" });
   const result = await confirmPayment(queryId, txId, wallet);
@@ -84,26 +103,19 @@ app.get("/api/intelligence/usage", async (req, res) => {
 
 // ── Agent routes ──────────────────────────────────────────────
 
-// GET /agent/status — current agent state + stats
 app.get("/agent/status", (req, res) => {
   res.json(getAgentStatus());
 });
 
-// GET /agent/log — recent decisions
-// Optional: ?limit=20
 app.get("/agent/log", (req, res) => {
   const limit = parseInt(req.query.limit as string) || 20;
-  res.json({
-    decisions: getAgentLog(limit),
-  });
+  res.json({ decisions: getAgentLog(limit) });
 });
 
-// GET /agent/log/full — full log including stats
 app.get("/agent/log/full", (req, res) => {
   res.json(getAgentFullLog());
 });
 
-// POST /agent/run — manually trigger one agent cycle
 app.post("/agent/run", async (req, res) => {
   try {
     console.log("🔧 Manual agent trigger received");
@@ -119,13 +131,11 @@ app.post("/agent/run", async (req, res) => {
   }
 });
 
-// POST /agent/stop — stop the scheduler
 app.post("/agent/stop", (req, res) => {
   stopAgentScheduler();
   res.json({ success: true, message: "Agent scheduler stopped" });
 });
 
-// POST /agent/start — restart the scheduler
 app.post("/agent/start", (req, res) => {
   startAgentScheduler();
   res.json({ success: true, message: "Agent scheduler started" });
@@ -139,6 +149,9 @@ app.listen(3001, () => {
   console.log("   GET  /api/intelligence/block/:number");
   console.log("   POST /api/intelligence/confirm/:queryId");
   console.log("   GET  /api/intelligence/usage");
+  console.log("📅 Reports API:");
+  console.log("   GET  /reports");
+  console.log("   GET  /reports/weekly");
   console.log("⚡ Agent API:");
   console.log("   GET  /agent/status");
   console.log("   GET  /agent/log");
@@ -153,10 +166,9 @@ async function start() {
 
   let currentBlock = await getLatestBlock();
 
-  // Start agent scheduler after engine is ready
   setTimeout(() => {
     startAgentScheduler();
-  }, 10000); // 10s delay to let engine warm up first
+  }, 10000);
 
   while (true) {
     try {

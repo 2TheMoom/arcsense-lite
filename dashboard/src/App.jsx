@@ -814,7 +814,7 @@ function LandingPage({ onLaunch }) {
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <a href="https://github.com/2TheMoon/arcsense-lite" target="_blank" rel="noopener noreferrer"
+          <a href="https://github.com/2TheMoom/arcsense-lite" target="_blank" rel="noopener noreferrer"
             style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 10, letterSpacing: 2, color: C.muted, textDecoration: "none", padding: "6px 12px", border: `1px solid ${C.border}`, display: isMobile ? "none" : "block" }}
           >GITHUB</a>
           <button onClick={handleLaunch} style={{ background: C.navy, border: "none", color: C.white, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 11, letterSpacing: 3, fontWeight: 700, padding: isMobile ? "8px 16px" : "8px 22px", transition: "all 0.2s" }}
@@ -841,7 +841,7 @@ function LandingPage({ onLaunch }) {
             onMouseEnter={e => e.currentTarget.style.background = C.navyL}
             onMouseLeave={e => e.currentTarget.style.background = C.navy}
           >▶ LAUNCH DASHBOARD</button>
-          <a href="https://github.com/2TheMoon/arcsense-lite" target="_blank" rel="noopener noreferrer"
+          <a href="https://github.com/2TheMoom/arcsense-lite" target="_blank" rel="noopener noreferrer"
             style={{ background: "none", border: `1px solid ${C.border}`, color: C.muted, cursor: "pointer", fontFamily: "'Barlow Condensed', sans-serif", fontSize: 13, letterSpacing: 3, fontWeight: 700, padding: "14px 32px", textDecoration: "none", display: "inline-block" }}
           >VIEW GITHUB</a>
         </div>
