@@ -401,15 +401,15 @@ function ContractsPanel({ blocks, isMobile, selectedContract, onSelectContract }
 
 // ── Agent Intelligence panel ──────────────────────────────────
 function AgentPanel({ agentStatus, agentLog, isMobile, onTrigger, triggering }) {
-  const status      = triggering ? "RUNNING" : (agentStatus?.status || "IDLE");
-  const statusColor = status === "RUNNING" ? C.green : status === "ERROR" ? C.crimson : C.muted;
+  const displayStatus      = triggering ? "RUNNING" : (agentStatus?.status || "IDLE");
+  const statusColor = displayStatus === "RUNNING" ? C.green : displayStatus === "ERROR" ? C.crimson : C.muted;
   const displayLog  = isMobile ? (agentLog || []).slice(0, 5) : (agentLog || []).slice(0, 10);
   return (
     <HudPanel label="AGENT INTELLIGENCE" accent={C.green} style={{ display: "flex", flexDirection: "column", height: isMobile ? "auto" : "100%", overflow: "hidden", minHeight: 0 }}>
       <div style={{ padding: "12px 14px 10px", borderBottom: `1px solid ${C.borderL}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <div style={{ width: 6, height: 6, borderRadius: "50%", background: statusColor, animation: status === "RUNNING" ? "blink 1s ease-in-out infinite" : "none" }} />
-          <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9, letterSpacing: 3, color: statusColor, fontWeight: 700 }}>{status}</span>
+          <div style={{ width: 6, height: 6, borderRadius: "50%", background: statusColor, animation: displayStatus === "RUNNING" ? "blink 1s ease-in-out infinite" : "none" }} />
+          <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 9, letterSpacing: 3, color: statusColor, fontWeight: 700 }}>{displayStatus}</span>
         </div>
         <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, letterSpacing: 2, color: C.mutedL }}>AUTONOMOUS</span>
       </div>
