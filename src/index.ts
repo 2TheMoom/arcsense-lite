@@ -42,15 +42,22 @@ app.get("/reports", (req, res) => {
 });
 
 // ── Weekly report endpoint ────────────────────────────────────
+// FIXED: filter now only matches dated report files like
+// "weekly-2026-06-05-to-2026-06-12.json" — previously also
+// matched "weekly-store.json" (the raw snapshot accumulator),
+// which sorted first and was served instead of the real report.
 app.get("/reports/weekly", (req, res) => {
   try {
-    const dir   = path.join(process.cwd(), "reports");
+    const dir = path.join(process.cwd(), "reports");
     if (!fs.existsSync(dir)) return res.status(404).json({ error: "No weekly report yet" });
+
     const files = fs.readdirSync(dir)
-      .filter(f => f.startsWith("weekly-") && f.endsWith(".json"))
+      .filter(f => /^weekly-\d{4}-\d{2}-\d{2}-to-\d{4}-\d{2}-\d{2}\.json$/.test(f))
       .sort()
       .reverse();
+
     if (files.length === 0) return res.status(404).json({ error: "No weekly report yet" });
+
     const latest = JSON.parse(fs.readFileSync(path.join(dir, files[0]), "utf-8"));
     res.json(latest);
   } catch (err: any) {
