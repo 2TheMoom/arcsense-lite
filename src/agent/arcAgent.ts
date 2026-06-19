@@ -16,10 +16,11 @@ import {
   type NetworkSnapshot,
 } from "./agentDecision";
 import {
-  payForIntelligence,
+  callContractPurchase,
   getAgentBalance,
   getOnChainTxHash,
   AGENT_WALLET_ADDRESS,
+  QueryType,
 } from "./agentWallet";
 import {
   queryContractIntelligence,
@@ -56,26 +57,22 @@ async function fetchNetworkHealthDirect(): Promise<{
           const json    = JSON.parse(raw);
           const reports = Array.isArray(json) ? json : (json.reports || []);
           const recent  = reports.slice(-30);
-
           if (recent.length === 0) {
             resolve({ success: false, error: "No block data available yet" });
             return;
           }
-
           const totalTx  = recent.reduce((s: number, b: any) => s + (b.totalTx || 0), 0);
           const failed   = recent.reduce((s: number, b: any) => s + (b.failedTx || 0), 0);
           const avgRate  = recent.reduce((s: number, b: any) => s + (b.failureRate || 0), 0) / recent.length;
           const health   = Math.max(0, Math.round(100 - avgRate * 400));
           const latest   = reports[reports.length - 1];
 
-          // Build top failing contracts from recent blocks
           const contractMap: Record<string, number> = {};
           for (const b of recent) {
             for (const [addr, count] of Object.entries(b.topFailingContracts || {})) {
               contractMap[addr] = (contractMap[addr] || 0) + (count as number);
             }
           }
-
           const topFailingContracts = Object.entries(contractMap)
             .sort((a, b) => b[1] - a[1])
             .slice(0, 5)
@@ -105,6 +102,13 @@ async function fetchNetworkHealthDirect(): Promise<{
   });
 }
 
+// ── Map agent decision action to QueryType enum ───────────────
+function decisionToQueryType(action: string): QueryType {
+  if (action === "CONTRACT_SCAN")  return QueryType.CONTRACT_RISK;
+  if (action === "BLOCK_ANALYSIS") return QueryType.BLOCK;
+  return QueryType.NETWORK;
+}
+
 // ── Core agent cycle ──────────────────────────────────────────
 export async function runAgentCycle(): Promise<{
   cycleNumber: number;
@@ -119,11 +123,9 @@ export async function runAgentCycle(): Promise<{
       balance:     0,
     };
   }
-
   isRunning = true;
   setAgentStatus("RUNNING");
   currentCycle = incrementCycle();
-
   console.log(`\n🤖 ═══ Agent Cycle #${currentCycle} started ═══`);
 
   try {
@@ -131,7 +133,7 @@ export async function runAgentCycle(): Promise<{
     const balance = await getAgentBalance();
     console.log(`💰 Agent balance: ${balance} USDC`);
 
-    // ── Step 2: Fetch network health directly (free, no query gate)
+    // ── Step 2: Fetch network health directly ────────────────
     console.log(`📡 Fetching network health directly from /reports...`);
     const healthResponse = await fetchNetworkHealthDirect();
 
@@ -146,7 +148,6 @@ export async function runAgentCycle(): Promise<{
         data:        healthResponse,
         cycleNumber: currentCycle,
       });
-
       isRunning = false;
       setAgentStatus("IDLE");
       return { cycleNumber: currentCycle, decision, balance };
@@ -162,7 +163,6 @@ export async function runAgentCycle(): Promise<{
       topFailingContracts: healthResponse.data.topFailingContracts || [],
       latestBlock:         healthResponse.data.latestBlock,
     };
-
     console.log(`📊 Network: ${snapshot.status} | Health: ${snapshot.healthScore}/100 | Failures: ${snapshot.avgFailureRate} | Blocks: ${snapshot.blocksAnalyzed}`);
 
     // ── Step 4: Make decision ─────────────────────────────────
@@ -181,7 +181,6 @@ export async function runAgentCycle(): Promise<{
         data:        { snapshot, decision },
         cycleNumber: currentCycle,
       });
-
       isRunning = false;
       setAgentStatus("IDLE");
       return { cycleNumber: currentCycle, decision: logged, balance };
@@ -199,36 +198,38 @@ export async function runAgentCycle(): Promise<{
         data:        { snapshot, decision, balance },
         cycleNumber: currentCycle,
       });
-
       isRunning = false;
       setAgentStatus("IDLE");
       return { cycleNumber: currentCycle, decision: logged, balance };
     }
 
-    // ── Step 7: Send payment ──────────────────────────────────
-    const queryId       = crypto.randomUUID();
-    const paymentResult = await payForIntelligence(queryId);
+    // ── Step 7: Call ArcSenseGate contract ───────────────────
+    // Replaces direct wallet-to-wallet USDC transfer.
+    // Agent calls purchaseNative(queryType) with 0.1 USDC native value.
+    // Contract emits QueryPurchased event, engine credits the wallet.
+    const queryId    = crypto.randomUUID();
+    const queryType  = decisionToQueryType(decision.action);
+    const paymentResult = await callContractPurchase(queryId, queryType);
 
     if (!paymentResult.success || !paymentResult.txId) {
       const logged = logDecision({
         type:        "PAYMENT_FAILED",
-        reasoning:   `Payment failed: ${paymentResult.error}`,
-        action:      "Intelligence purchase failed — payment rejected",
+        reasoning:   `Contract call failed: ${paymentResult.error}`,
+        action:      "Intelligence purchase failed — contract call rejected",
         paid:        false,
         amountPaid:  0,
         txId:        null,
         data:        { snapshot, decision, paymentResult },
         cycleNumber: currentCycle,
       });
-
       isRunning = false;
       setAgentStatus("IDLE");
       return { cycleNumber: currentCycle, decision: logged, balance };
     }
 
-    console.log(`✅ Payment accepted by Circle: ${paymentResult.txId}`);
+    console.log(`✅ Contract call accepted: ${paymentResult.txId}`);
 
-    // ── Step 8: Fetch real on-chain hash via Blockscout ───────
+    // ── Step 8: Fetch on-chain tx hash via Blockscout ────────
     const txHash      = await getOnChainTxHash(AGENT_WALLET_ADDRESS);
     const explorerUrl = txHash
       ? `https://testnet.arcscan.app/tx/${txHash}`
@@ -236,15 +237,14 @@ export async function runAgentCycle(): Promise<{
 
     console.log(`🔗 Arc Explorer: ${explorerUrl}`);
 
-    // Log payment sent
     logDecision({
       type:        "PAYMENT_SENT",
-      reasoning:   `Payment of 0.1 USDC sent to ArcSense service wallet`,
-      action:      `Sent 0.1 USDC — tx: ${txHash || paymentResult.txId}`,
+      reasoning:   `0.1 USDC sent to ArcSenseGate contract via purchaseNative(${QueryType[queryType]})`,
+      action:      `Called ArcSenseGate.purchaseNative — tx: ${txHash || paymentResult.txId}`,
       paid:        true,
       amountPaid:  0.1,
       txId:        txHash || paymentResult.txId,
-      data:        { snapshot, decision, paymentResult, explorerUrl },
+      data:        { snapshot, decision, paymentResult, explorerUrl, contract: "0xd0aEAD5b90eD18bBe830cDA38789B60F4abbab4D" },
       cycleNumber: currentCycle,
     });
 
@@ -277,7 +277,7 @@ export async function runAgentCycle(): Promise<{
     const logged = logDecision({
       type:        decision.action === "CONTRACT_SCAN" ? "CONTRACT_SCAN" : "BLOCK_ANALYSIS",
       reasoning:   decision.reasoning,
-      action:      `Paid 0.1 USDC for ${decision.action} — ${
+      action:      `Paid 0.1 USDC via ArcSenseGate for ${decision.action} — ${
         decision.action === "CONTRACT_SCAN"
           ? `Risk: ${intelligenceData?.riskLevel || "UNKNOWN"}`
           : `Severity: ${intelligenceData?.severity || "UNKNOWN"}`
@@ -290,20 +290,19 @@ export async function runAgentCycle(): Promise<{
         decision,
         intelligence: intelligenceData,
         explorerUrl,
+        contract: "0xd0aEAD5b90eD18bBe830cDA38789B60F4abbab4D",
       },
       cycleNumber: currentCycle,
     });
 
     console.log(`✅ Cycle #${currentCycle} complete`);
     console.log(`🤖 ═══════════════════════════════════════\n`);
-
     isRunning = false;
     setAgentStatus("IDLE");
     return { cycleNumber: currentCycle, decision: logged, balance };
 
   } catch (err: any) {
     console.error(`❌ Agent cycle error:`, err.message);
-
     const logged = logDecision({
       type:        "ERROR",
       reasoning:   err.message,
@@ -314,7 +313,6 @@ export async function runAgentCycle(): Promise<{
       data:        { error: err.message },
       cycleNumber: currentCycle,
     });
-
     isRunning = false;
     setAgentStatus("ERROR");
     return { cycleNumber: currentCycle, decision: logged, balance: 0 };
@@ -327,13 +325,8 @@ export function startAgentScheduler(): void {
     console.log("⚠️  Agent scheduler already running");
     return;
   }
-
   console.log(`⚡ Agent scheduler started — running every ${SCHEDULE_INTERVAL / 60000} minutes`);
-
-  // Run immediately on start
   runAgentCycle().catch(console.error);
-
-  // Then on schedule
   schedulerHandle = setInterval(() => {
     runAgentCycle().catch(console.error);
   }, SCHEDULE_INTERVAL);

@@ -9,11 +9,23 @@ const ENTITY_SECRET        = process.env.CIRCLE_ENTITY_SECRET!;
 const AGENT_WALLET_ID      = process.env.CIRCLE_AGENT_WALLET_ID!;
 const AGENT_WALLET_ADDRESS = process.env.CIRCLE_AGENT_WALLET_ADDRESS!;
 
-// Service wallet — receives USDC payments
+// Service wallet — receives legacy USDC payments
 const SERVICE_WALLET_ADDRESS = process.env.CIRCLE_WALLET_ADDRESS!;
 const SERVICE_WALLET_ID      = process.env.CIRCLE_WALLET_ID!;
 
+// ArcSenseGate contract on Arc Testnet
+const ARCSENSE_GATE_ADDRESS = "0xd0aEAD5b90eD18bBe830cDA38789B60F4abbab4D";
+
 const QUERY_PRICE = 0.1; // USDC
+
+// ── QueryType enum — mirrors ArcSenseGate.sol ─────────────────
+export enum QueryType {
+  NETWORK       = 0,
+  CONTRACT_RISK = 1,
+  BLOCK         = 2,
+  USAGE         = 3,
+  WEEKLY        = 4,
+}
 
 // ── Generate fresh ciphertext every call ─────────────────────
 function generateCiphertext(): string {
@@ -129,9 +141,13 @@ export async function getServiceBalance(): Promise<number> {
   }
 }
 
-// ── Agent pays service wallet for intelligence ────────────────
-export async function payForIntelligence(
-  queryId: string
+// ── Call ArcSenseGate.purchaseNative(queryType) ───────────────
+// Sends 0.1 USDC native value to the contract + records the query type.
+// This is the primary payment path — replaces direct wallet-to-wallet transfer.
+// The contract emits QueryPurchased which the engine listens to.
+export async function callContractPurchase(
+  queryId:   string,
+  queryType: QueryType = QueryType.NETWORK
 ): Promise<{ success: boolean; txId?: string; error?: string }> {
   try {
     const balance = await getAgentBalance();
@@ -147,6 +163,69 @@ export async function payForIntelligence(
     const ciphertext = generateCiphertext();
     console.log(`🔐 Ciphertext generated (length: ${ciphertext.length})`);
 
+    // Call purchaseNative(uint8 queryType) with 0.1 USDC native value
+    const body = {
+      idempotencyKey:         crypto.randomUUID(),
+      entitySecretCiphertext: ciphertext,
+      walletId:               AGENT_WALLET_ID,
+      blockchain:             "ARC-TESTNET",
+      contractAddress:        ARCSENSE_GATE_ADDRESS,
+      abiFunctionSignature:   "purchaseNative(uint8)",
+      abiParameters:          [queryType.toString()],
+      amount:                 QUERY_PRICE.toFixed(2), // 0.1 USDC native
+      feeLevel:               "MEDIUM",
+      refId:                  queryId,
+    };
+
+    console.log(`📤 Calling ArcSenseGate.purchaseNative(${QueryType[queryType]}):`);
+    console.log(`   Contract:  ${ARCSENSE_GATE_ADDRESS}`);
+    console.log(`   Agent:     ${AGENT_WALLET_ID}`);
+    console.log(`   Amount:    ${QUERY_PRICE} USDC`);
+    console.log(`   QueryType: ${queryType} (${QueryType[queryType]})`);
+
+    const response = await circleRequest(
+      "POST",
+      "/v1/w3s/developer/transactions/contractExecution",
+      body
+    );
+
+    if (response.data?.id) {
+      console.log(`✅ Contract call submitted: ${response.data.id}`);
+      console.log(`   ArcSenseGate: ${ARCSENSE_GATE_ADDRESS}`);
+      return { success: true, txId: response.data.id };
+    }
+
+    // Fallback to direct transfer if contract execution not supported
+    console.warn("⚠️  Contract execution failed, falling back to direct transfer");
+    console.error(JSON.stringify(response, null, 2));
+    return await payForIntelligence(queryId);
+
+  } catch (err: any) {
+    console.error("💥 callContractPurchase exception:", err.message);
+    // Fallback to legacy transfer
+    console.warn("⚠️  Falling back to direct USDC transfer");
+    return await payForIntelligence(queryId);
+  }
+}
+
+// ── Agent pays service wallet directly (legacy fallback) ──────
+// Kept as fallback in case contract execution is unavailable.
+export async function payForIntelligence(
+  queryId: string
+): Promise<{ success: boolean; txId?: string; error?: string }> {
+  try {
+    const balance = await getAgentBalance();
+
+    if (balance < QUERY_PRICE) {
+      console.error(`❌ Insufficient agent balance: ${balance} USDC (needs ${QUERY_PRICE})`);
+      return {
+        success: false,
+        error:   `Insufficient agent balance. Has ${balance} USDC, needs ${QUERY_PRICE} USDC`,
+      };
+    }
+
+    const ciphertext = generateCiphertext();
+
     const body = {
       idempotencyKey:         crypto.randomUUID(),
       entitySecretCiphertext: ciphertext,
@@ -158,12 +237,10 @@ export async function payForIntelligence(
       refId:                  queryId,
     };
 
-    console.log(`📤 Sending payment request:`);
-    console.log(`   walletId (sender):   ${AGENT_WALLET_ID}`);
-    console.log(`   destination:         ${SERVICE_WALLET_ADDRESS}`);
-    console.log(`   amount:              ${QUERY_PRICE} USDC`);
-    console.log(`   blockchain:          ARC-TESTNET`);
-    console.log(`   feeLevel:            MEDIUM`);
+    console.log(`📤 Sending direct transfer (legacy):`);
+    console.log(`   From: ${AGENT_WALLET_ADDRESS}`);
+    console.log(`   To:   ${SERVICE_WALLET_ADDRESS}`);
+    console.log(`   Amount: ${QUERY_PRICE} USDC`);
 
     const response = await circleRequest(
       "POST",
@@ -172,14 +249,11 @@ export async function payForIntelligence(
     );
 
     if (response.data?.id) {
-      console.log(`💸 Agent→Service payment sent: ${response.data.id}`);
-      console.log(`   From: ${AGENT_WALLET_ADDRESS}`);
-      console.log(`   To:   ${SERVICE_WALLET_ADDRESS}`);
-      console.log(`   Amount: ${QUERY_PRICE} USDC`);
+      console.log(`💸 Direct transfer sent: ${response.data.id}`);
       return { success: true, txId: response.data.id };
     }
 
-    console.error("❌ Circle payment rejected — full response:");
+    console.error("❌ Direct transfer rejected:");
     console.error(JSON.stringify(response, null, 2));
     return {
       success: false,
@@ -193,7 +267,6 @@ export async function payForIntelligence(
 }
 
 // ── Fetch on-chain tx hash via Blockscout API ─────────────────
-// Queries the most recent outgoing tx from the agent wallet
 export async function getOnChainTxHash(
   walletAddress: string
 ): Promise<string | null> {
@@ -223,8 +296,7 @@ export async function getOnChainTxHash(
   }
 }
 
-// ── Verify payment from ANY wallet via Blockscout (Option A) ──
-// Checks if the service wallet received USDC from a given wallet
+// ── Verify payment from ANY wallet via Blockscout ─────────────
 export async function verifyExternalPayment(
   fromWalletAddress: string,
   minAmount: number = QUERY_PRICE
@@ -233,26 +305,40 @@ export async function verifyExternalPayment(
     console.log(`🔍 Verifying external payment from ${fromWalletAddress}`);
     await new Promise(r => setTimeout(r, 5000));
 
-    // Fetch recent incoming txs to the service wallet
     const response = await blockscoutGet(
       `/api/v2/addresses/${SERVICE_WALLET_ADDRESS}/transactions?filter=to`
     );
 
     const items = response?.items || [];
 
-    // Find a tx from the querying wallet
     const match = items.find((tx: any) => {
       const from   = (tx.from?.hash || "").toLowerCase();
       const target = fromWalletAddress.toLowerCase();
-      const value  = parseFloat(tx.value || "0") / 1e18; // USDC native = 18 decimals
+      const value  = parseFloat(tx.value || "0") / 1e18;
       return from === target && value >= minAmount;
     });
 
     if (match) {
       console.log(`✅ External payment verified: ${match.hash}`);
-      console.log(`   From: ${fromWalletAddress}`);
-      console.log(`   To:   ${SERVICE_WALLET_ADDRESS}`);
       return { confirmed: true, txHash: match.hash };
+    }
+
+    // Also check payments to the contract (new path)
+    const contractResponse = await blockscoutGet(
+      `/api/v2/addresses/${ARCSENSE_GATE_ADDRESS}/transactions?filter=to`
+    );
+
+    const contractItems = contractResponse?.items || [];
+    const contractMatch = contractItems.find((tx: any) => {
+      const from  = (tx.from?.hash || "").toLowerCase();
+      const target = fromWalletAddress.toLowerCase();
+      const value  = parseFloat(tx.value || "0") / 1e18;
+      return from === target && value >= minAmount;
+    });
+
+    if (contractMatch) {
+      console.log(`✅ Contract payment verified: ${contractMatch.hash}`);
+      return { confirmed: true, txHash: contractMatch.hash };
     }
 
     console.log(`⚠️  No matching payment found from ${fromWalletAddress}`);
@@ -269,4 +355,5 @@ export {
   AGENT_WALLET_ADDRESS,
   SERVICE_WALLET_ADDRESS,
   SERVICE_WALLET_ID,
+  ARCSENSE_GATE_ADDRESS,
 };
