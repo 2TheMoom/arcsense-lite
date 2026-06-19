@@ -1289,7 +1289,7 @@ export default function ArcSenseDashboard() {
               ? <ScopedStatsRow blocks={blocks} selectedContract={selectedContract} isMobile={false} />
               : <StatsRow blocks={blocks} isMobile={false} meta={meta} agentStatus={agentStatus} />
             }
-            <div style={{ display: "grid", gridTemplateColumns: "230px 200px 1fr 230px", gap: 12, flex: 1, minHeight: 0, overflow: "hidden" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "220px 1fr 1.6fr 230px", gap: 12, flex: 1, minHeight: 0, overflow: "hidden" }}>
               <BlockFeed blocks={blocks} isMobile={false} selectedContract={selectedContract} />
               <NetworkPulse blocks={blocks} isMobile={false} selectedContract={selectedContract} />
               <ContractsPanel blocks={blocks} isMobile={false} selectedContract={selectedContract} onSelectContract={setSelected} />
