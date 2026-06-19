@@ -709,13 +709,16 @@ function ApiAccessModal({ onClose, isMobile }) {
   const BASE = API;
   const W    = "YOUR_WALLET_ADDRESS";
 
+  const GATE = "0xd0aEAD5b90eD18bBe830cDA38789B60F4abbab4D";
+
   const endpoints = [
     { method: "GET",  url: `${BASE}/api/intelligence/network?wallet=${W}&mode=prepay`,  desc: "Network health snapshot" },
     { method: "GET",  url: `${BASE}/api/intelligence/contract/0xCONTRACT?wallet=${W}`,  desc: "Contract risk score" },
     { method: "GET",  url: `${BASE}/api/intelligence/block/BLOCK_NUMBER?wallet=${W}`,   desc: "Block analysis" },
     { method: "GET",  url: `${BASE}/api/intelligence/usage?wallet=${W}`,                desc: "Your usage stats" },
     { method: "GET",  url: `${BASE}/reports/weekly`,                                    desc: "Latest weekly intelligence report" },
-    { method: "POST", url: `${BASE}/api/intelligence/confirm/QUERY_ID`,                 desc: "Confirm payment · Body: { wallet, txId }" },
+    { method: "GET",  url: `${BASE}/api/contract`,                                      desc: "ArcSenseGate contract info, ABI + query types" },
+    { method: "POST", url: `${BASE}/api/intelligence/confirm/QUERY_ID`,                 desc: "Legacy confirm · Body: { wallet, txId }" },
   ];
 
   return (
@@ -745,15 +748,29 @@ function ApiAccessModal({ onClose, isMobile }) {
           ))}
         </div>
         <div style={{ padding: "14px 20px", borderBottom: `1px solid ${C.borderL}` }}>
-          <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL, marginBottom: 8 }}>PAYMENT DESTINATION</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, background: C.bg, border: `1px solid ${C.borderL}`, padding: "10px 12px" }}>
-            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: C.navy, fontWeight: 700, flex: 1, wordBreak: "break-all" }}>{SERVICE_WALLET}</span>
-            <button onClick={copyWallet} style={{ background: copied ? C.green : C.navy, border: "none", color: C.white, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", fontSize: 9, letterSpacing: 2, padding: "5px 12px", flexShrink: 0, transition: "all 0.2s" }}>
-              {copied ? "✓ COPIED" : "COPY"}
-            </button>
+          <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL, marginBottom: 8 }}>PAYMENT DESTINATIONS</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div>
+              <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 7, letterSpacing: 2, color: C.mutedL, marginBottom: 4 }}>ARCSENSEGATE CONTRACT (RECOMMENDED)</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, background: C.bg, border: `1px solid ${C.borderL}`, padding: "10px 12px" }}>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: C.navy, fontWeight: 700, flex: 1, wordBreak: "break-all" }}>{GATE}</span>
+                <button onClick={() => copyUrl(GATE)} style={{ background: copiedUrl === GATE ? C.green : C.navy, border: "none", color: C.white, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", fontSize: 9, letterSpacing: 2, padding: "5px 12px", flexShrink: 0, transition: "all 0.2s" }}>
+                  {copiedUrl === GATE ? "✓ COPIED" : "COPY"}
+                </button>
+              </div>
+            </div>
+            <div>
+              <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 7, letterSpacing: 2, color: C.mutedL, marginBottom: 4 }}>LEGACY SERVICE WALLET</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, background: C.bg, border: `1px solid ${C.borderL}`, padding: "10px 12px" }}>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: C.navy, fontWeight: 700, flex: 1, wordBreak: "break-all" }}>{SERVICE_WALLET}</span>
+                <button onClick={copyWallet} style={{ background: copied ? C.green : C.navy, border: "none", color: C.white, cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif", fontSize: 9, letterSpacing: 2, padding: "5px 12px", flexShrink: 0, transition: "all 0.2s" }}>
+                  {copied ? "✓ COPIED" : "COPY"}
+                </button>
+              </div>
+            </div>
           </div>
           <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: C.mutedL, marginTop: 6 }}>
-            Send USDC to this address on Arc using any EVM wallet
+            Contract path: credits added automatically on-chain. Legacy path: manual confirm required.
           </div>
         </div>
         <div style={{ padding: "14px 20px", borderBottom: `1px solid ${C.borderL}` }}>
@@ -779,14 +796,29 @@ function ApiAccessModal({ onClose, isMobile }) {
           </div>
         </div>
         <div style={{ padding: "14px 20px", borderBottom: `1px solid ${C.borderL}` }}>
-          <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL, marginBottom: 8 }}>HOW TO PAY</div>
+          <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL, marginBottom: 4 }}>HOW TO PAY — CONTRACT PATH</div>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: C.green, marginBottom: 10 }}>✓ RECOMMENDED · credits added automatically</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {[
+              { n: "1", text: `Call purchaseNative(queryType) on the ArcSenseGate contract with 0.1 USDC native value` },
+              { n: "2", text: `Or call purchaseERC20(queryType) — approve the contract for 100000 USDC (6 decimals) first` },
+              { n: "3", text: `Contract emits QueryPurchased event — engine detects it and credits your wallet automatically` },
+              { n: "4", text: `queryType: 0=NETWORK  1=CONTRACT_RISK  2=BLOCK  3=USAGE  4=WEEKLY` },
+            ].map(s => (
+              <div key={s.n} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 10, fontWeight: 700, color: C.white, background: C.green, padding: "1px 7px", flexShrink: 0 }}>{s.n}</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: C.text, lineHeight: 1.6 }}>{s.text}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 8, letterSpacing: 3, color: C.mutedL, marginBottom: 4, marginTop: 14 }}>HOW TO PAY — LEGACY PATH</div>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: C.mutedL, marginBottom: 10 }}>manual confirm required</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {[
               { n: "1", text: `Send 0.1 USDC to the service wallet above on Arc` },
               { n: "2", text: `Copy your transaction hash (starts with 0x)` },
               { n: "3", text: `Call POST /api/intelligence/confirm/:queryId` },
               { n: "4", text: `Body: { "wallet": "0xYOURS", "txId": "0xTX_HASH" }` },
-              { n: "5", text: `1 credit added — next query served immediately` },
             ].map(s => (
               <div key={s.n} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
                 <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 10, fontWeight: 700, color: C.white, background: C.navy, padding: "1px 7px", flexShrink: 0 }}>{s.n}</span>
@@ -1289,7 +1321,7 @@ export default function ArcSenseDashboard() {
               ? <ScopedStatsRow blocks={blocks} selectedContract={selectedContract} isMobile={false} />
               : <StatsRow blocks={blocks} isMobile={false} meta={meta} agentStatus={agentStatus} />
             }
-            <div style={{ display: "grid", gridTemplateColumns: "220px 1fr 1.6fr 230px", gap: 12, flex: 1, minHeight: 0, overflow: "hidden" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "230px 200px 1fr 230px", gap: 12, flex: 1, minHeight: 0, overflow: "hidden" }}>
               <BlockFeed blocks={blocks} isMobile={false} selectedContract={selectedContract} />
               <NetworkPulse blocks={blocks} isMobile={false} selectedContract={selectedContract} />
               <ContractsPanel blocks={blocks} isMobile={false} selectedContract={selectedContract} onSelectContract={setSelected} />
